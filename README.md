@@ -90,15 +90,16 @@ Only Trade Analytics works over a plain `python -m http.server`; the spread boar
 
 Vercel picks up `api/spread.js` automatically from the `api/` directory — no configuration, no dependencies
 to install, no environment variables. It needs Node 18 or newer for global `fetch`, which is the default
-runtime. After the first deploy, confirm the endpoint is live:
+runtime. Confirm the endpoint against the production alias:
 
 ```bash
-curl -si https://<your-vercel-domain>/api/spread | head -20
+curl -si https://notion-templates-iota.vercel.app/api/spread | head -20
 ```
 
-You want a `200`, a `Cache-Control: s-maxage=10, stale-while-revalidate=30` header, and JSON with populated
-`venues`. If that route 404s, the spread board will show "stale, retrying" while Trade Analytics keeps
-working, since it needs no backend.
+You want a `200` and JSON with populated `venues`. Note the response `Cache-Control` will read
+`public, max-age=0, must-revalidate` — that is Vercel's transform, not a fault; see
+[Which host to test](#which-host-to-test) and the caching section below. If that route 404s, the spread
+board shows "stale, retrying" while the other widgets keep working, since they need no backend.
 
 The widget is then live at:
 
@@ -197,24 +198,25 @@ A venue that fails, times out or returns junk lands in `errors` and is dropped f
 fails the response. The browser calls only this same-origin endpoint, never an exchange directly, which
 sidesteps CORS and keeps caching in one place.
 
-### Deployment Protection must be off
+### Which host to test
 
-Vercel enables **Vercel Authentication** on some new projects. While it is on, every `.vercel.app` URL
-302-redirects to a Vercel login, so a Notion embed shows a login page instead of the widget and
-`/api/spread` never answers a visitor. It also suppresses edge caching, which removes the flat-cost
-property described below.
+The production alias is:
 
-Turn it off at **Project → Settings → Deployment Protection → Vercel Authentication → Disabled**, then
-confirm with an unauthenticated request:
-
-```bash
-curl -s -o /dev/null -w '%{http_code}\n' https://<your-vercel-domain>/api/spread
-# want 200, not 302
+```
+https://notion-templates-iota.vercel.app
 ```
 
-These widgets are public read-only tools with no auth, no cookies and no server state, so there is nothing
-for protection to protect. If you would rather keep `.vercel.app` locked, the setting
-`all_except_custom_domains` lets you attach your own domain and serve the widgets from there instead.
+**That is the public host, and the only one embedded in Notion.** Use it for every public, framing or
+caching check.
+
+The per-deployment URLs (`notion-templates-<hash>-<team>.vercel.app`) are covered by Vercel Authentication
+and 302-redirect to a Vercel login. That is deliberate and is not a problem: the alias above is unaffected.
+Testing a deployment URL and concluding the site is down is an easy mistake to make twice.
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://notion-templates-iota.vercel.app/api/spread
+# 200
+```
 
 ### The function must run in the EU — do not remove the region pin
 
@@ -252,13 +254,23 @@ in the background. Every viewer worldwide inside the same 10s window is answered
 exchanges see roughly one round of calls per 10 seconds in total, not one round per viewer.** Ten viewers or
 ten thousand cost about the same: function invocations scale with the refresh interval, not the audience.
 
+Verified on the production alias: repeated requests to the same URL return `X-Vercel-Cache: MISS` once and
+then `HIT`/`STALE` with a climbing `Age`, and each distinct `?assets=` set is its own cache key.
+
+**Read `X-Vercel-Cache`, not `Cache-Control`, to judge this.** Vercel consumes the `s-maxage` and
+`stale-while-revalidate` directives for its own CDN and sends the browser
+`Cache-Control: public, max-age=0, must-revalidate` instead. That substituted header looks like caching is
+off; it is not.
+
 Two things protect that property — change them only deliberately:
 
 - The widget requests a **constant URL**. Adding a per-viewer cache-buster (a timestamp, a random value)
   would give every viewer a unique cache key and turn a flat cost into a per-viewer one.
 - The widget fetches with `cache: "no-store"`. That stops the *browser* reusing its own stale copy — the
   `s-maxage` directive targets shared caches, so a private cache would otherwise reuse the body
-  heuristically and the board would sit on stale prices. It does not bypass the edge cache.
+  heuristically and the board would sit on stale prices. It does not bypass the edge cache: a request sent
+  with `Cache-Control: no-cache` still comes back `HIT`, because Vercel's edge ignores client cache
+  directives.
 
 ## Adding a new widget
 
