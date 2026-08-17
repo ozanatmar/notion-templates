@@ -21,14 +21,16 @@
   body{margin:0;background:var(--bg);color:var(--ink);
     font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     -webkit-font-smoothing:antialiased;}
-  .wrap{max-width:780px;margin:0 auto;padding:20px 18px 30px}
+  /* Fills the embed width. Side padding scales with the viewport; the max-width only
+     stops the layout stretching absurdly on an ultrawide screen. */
+  .wrap{width:100%;max-width:1360px;margin:0 auto;padding:20px clamp(12px,3vw,32px) 30px}
   .head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:2px}
   h1{font-size:18px;margin:0;letter-spacing:.2px;font-weight:650}
   .chip{font:600 10px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;
     color:var(--accent);border:1px solid #1f3a5f;background:#0e1b2e;border-radius:5px;padding:4px 7px}
   .sub{color:var(--muted);font-size:12.5px;margin:3px 0 16px}
-  /* Deterministic KPI grid: 1 col < 420px, 2 cols 420-680px, 3 cols >= 680px.
-     Fixed counts keep the six tiles in even rows instead of orphaning one. */
+  /* Deterministic KPI grid: 1 col < 420px, 2 cols 420-680px, 3 cols 680-1080px,
+     6 cols >= 1080px. Every count divides the six tiles evenly, so no row is orphaned. */
   .kpis{display:grid;grid-template-columns:1fr;gap:9px;margin-bottom:14px}
   .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
   .kpi .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
@@ -38,8 +40,9 @@
   .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 15px;margin-bottom:12px}
   .card h2{font-size:12px;margin:0 0 2px;color:var(--ink2);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
   .card .cap{font-size:11.5px;color:var(--muted);margin:0 0 8px}
-  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  @media(max-width:620px){.row2{grid-template-columns:1fr}}
+  /* Stacked below 620px, side by side from 620px up. */
+  .row2{display:grid;grid-template-columns:1fr;gap:12px}
+  @media(min-width:620px){.row2{grid-template-columns:1fr 1fr}}
   .chartbox{position:relative;width:100%}
   svg{display:block;width:100%;height:auto;overflow:visible}
   .gl{stroke:var(--grid);stroke-width:1}
@@ -67,10 +70,14 @@
   .hint.err{color:var(--neg)}
   .foot{color:var(--muted);font-size:11px;margin-top:14px;line-height:1.6}
   .foot b{color:var(--ink2)}
+  .credit{text-align:center;color:var(--muted);font-size:11px;line-height:1.6;margin:16px 0 0}
+  .credit a{color:var(--accent);text-decoration:none;border-radius:3px}
+  .credit a:hover{text-decoration:underline}
+  .credit a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
     clip:rect(0 0 0 0);white-space:nowrap;border:0}
   @media(max-width:420px){
-    .wrap{padding:16px 12px 24px}
+    .wrap{padding-top:16px;padding-bottom:24px}
     h1{font-size:16px}
     .kpis{gap:7px}
     .kpi{padding:9px 10px}
@@ -80,6 +87,7 @@
   }
   @media(min-width:420px){.kpis{grid-template-columns:repeat(2,1fr)}}
   @media(min-width:680px){.kpis{grid-template-columns:repeat(3,1fr)}}
+  @media(min-width:1080px){.kpis{grid-template-columns:repeat(6,1fr)}}
   @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -129,6 +137,8 @@
   </details>
 
   <p class="foot"><b>Client-side only.</b> Nothing you paste leaves this page, there is no server call. In the shipped template this reads your Trade Log export. Numbers are for review, not advice.</p>
+
+  <p class="credit">This tool is developed by Ozan Atmar for the <a href="https://www.notion.com/templates/crypto-fx-trading-dashboard" target="_blank" rel="noopener">Crypto/FX Trading Dashboard v2</a> template.</p>
 </div>
 
 <script>
@@ -202,6 +212,14 @@ function renderKPIs(m){
     `<div class="kpi"><div class="l">${t.l}</div><div class="v ${t.c}">${t.v}</div><div class="s">${t.s}</div></div>`).join("");
 }
 
+// Charts draw into a viewBox whose width tracks the container, so widening the embed adds
+// plotting room instead of magnifying the drawing. Only the canvas width varies; every
+// coordinate, scale and colour below is unchanged.
+function chartWidth(box, min){
+  const w = Math.round(box.getBoundingClientRect().width);
+  return Math.max(min, w || min);
+}
+
 function niceTicks(min,max,count){
   const span=max-min||1, step0=span/count, mag=Math.pow(10,Math.floor(Math.log10(step0)));
   const norm=step0/mag, step=(norm<1.5?1:norm<3?2:norm<7?5:10)*mag;
@@ -212,7 +230,7 @@ function niceTicks(min,max,count){
 
 function renderEquity(m){
   const box=document.getElementById("equityBox");
-  const W=700,H=260, pl=52,pr=16,pt=16,pb=26;
+  const W=chartWidth(box,300),H=260, pl=52,pr=16,pt=16,pb=26;
   const iw=W-pl-pr, ih=H-pt-pb;
   const pts=m.pts;
   const ys=pts.map(p=>p.eq);
@@ -272,7 +290,7 @@ function renderEquity(m){
 
 function renderRbars(m){
   const box=document.getElementById("rBox");
-  const d=m.closed; const W=340,H=200,pl=10,pr=10,pt=22,pb=26,iw=W-pl-pr,ih=H-pt-pb;
+  const d=m.closed; const W=chartWidth(box,240),H=200,pl=10,pr=10,pt=22,pb=26,iw=W-pl-pr,ih=H-pt-pb;
   if(!d.length){box.innerHTML="<p class='cap'>No closed trades.</p>";return;}
   const rmax=Math.max(1,...d.map(t=>Math.abs(t.r)))*1.15;
   const Y=v=> pt + (rmax-v)/(2*rmax)*ih;
@@ -297,7 +315,7 @@ function renderSetup(m){
   const rows=Object.entries(m.bySetup).sort((a,b)=>b[1]-a[1]);
   if(!rows.length){box.innerHTML="<p class='cap'>No closed trades.</p>";return;}
   const maxAbs=Math.max(...rows.map(r=>Math.abs(r[1])))||1;
-  const W=340,rowH=34,pl=74,pr=52,mid=(W-pl-pr);
+  const W=chartWidth(box,240),rowH=34,pl=74,pr=52,mid=(W-pl-pr);
   const H=rows.length*rowH+8;
   const bars=rows.map((r,i)=>{
     const [name,val]=r; const y=8+i*rowH; const w=Math.abs(val)/maxAbs*mid;
@@ -319,7 +337,10 @@ function renderTable(m){
   document.getElementById("tbl").innerHTML=cap+head+rows+foot;
 }
 
+let current=null;
+
 function draw(trades){
+  current=trades;
   const m=compute(trades);
   renderKPIs(m); renderEquity(m); renderRbars(m); renderSetup(m); renderTable(m);
   return m;
@@ -391,6 +412,26 @@ document.getElementById("reset").addEventListener("click",()=>{
 });
 
 draw(SAMPLE);
+
+// Redraw the charts when the embed is resized, so the viewBox width keeps matching the
+// container. Guarded on the integer width: height changes alone must not retrigger this.
+(function watchWidth(){
+  const wrap=document.querySelector(".wrap");
+  const measure=()=>Math.round(wrap.getBoundingClientRect().width);
+  let last=measure(), queued=false;
+  // The first paint sizes each chart before its later siblings exist, so a vertical
+  // scrollbar appearing mid-render leaves them a scrollbar-width too wide. Redraw once
+  // on the next frame, when the layout has settled.
+  requestAnimationFrame(()=>{ if(current) draw(current); last=measure(); });
+  const onResize=()=>{
+    const w=measure();
+    if(w===last||queued) return;
+    queued=true;
+    requestAnimationFrame(()=>{ queued=false; last=measure(); if(current) draw(current); });
+  };
+  if(window.ResizeObserver) new ResizeObserver(onResize).observe(wrap);
+  else window.addEventListener("resize",onResize);
+})();
 </script>
 </body>
 </html>
