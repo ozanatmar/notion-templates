@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="TradingView economic calendar, high-importance events for the major currencies, dark themed for a Notion embed.">
+<title>Economic Calendar</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230d1117'/%3E%3Crect x='2.5' y='3.5' width='11' height='10' rx='1.5' fill='none' stroke='%2358a6ff' stroke-width='1.6'/%3E%3Cpath d='M2.5 6.5h11' stroke='%2358a6ff' stroke-width='1.6'/%3E%3Cpath d='M5.5 2.5v2M10.5 2.5v2' stroke='%2358a6ff' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --line:#232a33;
+    --ink:#e6edf3; --ink2:#9aa4b2; --muted:#6b7480; --accent:#58a6ff;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{width:100%;max-width:1360px;min-height:100%;margin:0 auto;
+    padding:14px clamp(10px,2.5vw,24px) 16px;display:flex;flex-direction:column;gap:10px}
+  .head{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+  h1{font-size:15px;margin:0;font-weight:650;letter-spacing:.2px}
+  .cur{font:600 11px/1 var(--mono);letter-spacing:.06em;color:var(--accent);
+    border:1px solid #1f3a5f;background:#0e1b2e;border-radius:5px;padding:4px 7px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:8px;flex:1 1 auto;display:flex;flex-direction:column;min-height:340px;overflow:hidden}
+  /* TradingView styles its iframe height:calc(100% - 32px) inline. That percentage
+     cannot resolve here: .card takes its height from flex layout, so it has no
+     *specified* height for a percentage to resolve against, and the iframe falls back
+     to the 150px intrinsic iframe height. Override the inline height and let flex do
+     the sizing instead, which needs no definite parent height. */
+  .tvbox{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
+  .tvbox .tradingview-widget-container__widget{flex:1 1 auto;min-height:0}
+  .tvbox iframe{flex:1 1 auto;min-height:0;display:block;border:0;
+    width:100%!important;height:auto!important}
+  .tvbox .tradingview-widget-copyright{flex:0 0 auto}
+  /* TradingView injects its own !important styles for this once loaded; these only
+     cover the moment before that, and the case where the script never arrives. */
+  .tradingview-widget-copyright{font-size:11px;line-height:1.6;text-align:center;
+    padding:4px 0 0;color:var(--muted)}
+  .tradingview-widget-copyright a{color:var(--muted);text-decoration:none}
+  .tradingview-widget-copyright .blue-text{color:var(--accent)}
+  .tvfail{margin:0;padding:14px 4px;text-align:center;color:var(--ink2);font-size:12.5px;line-height:1.7}
+  .tvfail b{color:var(--ink)}
+  .tvfail span{color:var(--muted);font-size:11.5px}
+  .credit{text-align:center;color:var(--muted);font-size:11px;line-height:1.6;margin:0}
+  .credit a{color:var(--accent);text-decoration:none;border-radius:3px}
+  .credit a:hover{text-decoration:underline}
+  .credit a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  @media(max-width:420px){
+    .wrap{padding:11px 10px 13px}
+    h1{font-size:14px}
+    .card{padding:6px;min-height:300px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>Economic Calendar</h1>
+    <span class="cur" id="curLabel">USD, EUR, GBP, JPY</span>
+  </div>
+
+  <div class="card">
+    <!-- TradingView replaces the script below with its widget, and adopts the
+         copyright block. The block is required by their terms: do not remove it. -->
+    <div class="tradingview-widget-container tvbox" id="tvbox">
+      <div class="tradingview-widget-container__widget"></div>
+      <div class="tradingview-widget-copyright">
+        <a href="https://www.tradingview.com/" rel="noopener nofollow" target="_blank">
+          <span class="blue-text">Track all markets on TradingView</span>
+        </a>
+      </div>
+    </div>
+    <p class="tvfail" id="tvfail" hidden>
+      <b>Calendar unavailable right now.</b><br>
+      <span>TradingView could not be reached. Nothing else on this page is affected &mdash; reload once your connection is back.</span>
+    </p>
+  </div>
+
+  <p class="credit">This tool is developed by Ozan Atmar for the <a href="https://www.notion.com/templates/crypto-fx-trading-dashboard" target="_blank" rel="noopener">Crypto/FX Trading Dashboard v2</a> template.</p>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var DEFAULTS = ["USD","EUR","GBP","JPY"];
+  var MAX = 12;
+  var CUR_OK = /^[A-Z]{3}$/;                    // ISO currency codes only
+
+  function q(name){
+    try { return new URLSearchParams(location.search).get(name); } catch (e) { return null; }
+  }
+  function parseCurrencies(raw){
+    if (!raw) return [];
+    var out = [], parts = String(raw).split(",");
+    for (var i = 0; i < parts.length; i++){
+      var c = parts[i].trim().toUpperCase();
+      if (CUR_OK.test(c) && out.indexOf(c) === -1) out.push(c);
+    }
+    return out.slice(0, MAX);
+  }
+
+  var currencies = parseCurrencies(q("currencies"));
+  if (!currencies.length) currencies = DEFAULTS.slice();
+
+  var label = document.getElementById("curLabel");
+  if (label) label.textContent = currencies.join(", ");
+
+  var box = document.getElementById("tvbox");
+  var fail = document.getElementById("tvfail");
+  var settled = false;
+  function ok(){ if (!settled){ settled = true; fail.hidden = true; } }
+  function bad(){ if (!settled){ settled = true; fail.hidden = false; } }
+
+  try {
+    var seen = new MutationObserver(function(){
+      if (box.querySelector("iframe")){ ok(); seen.disconnect(); }
+    });
+    seen.observe(box, { childList:true, subtree:true });
+
+    var s = document.createElement("script");
+    s.type = "text/javascript";
+    s.async = true;
+    s.src = "https://s3.tradingview.com/external-embedding/embed-widget-events.js";
+    s.onerror = bad;
+    s.textContent = JSON.stringify({
+      colorTheme: "dark",
+      // Must stay false: with isTransparent:true the calendar renders on white even
+      // under colorTheme:"dark". Letting TradingView paint its own dark background is
+      // what actually matches the shell.
+      isTransparent: false,
+      width: "100%",
+      height: "100%",
+      locale: "en",
+      importanceFilter: "1",            // high-importance releases only
+      currencyFilter: currencies.join(",")
+    });
+    box.appendChild(s);
+
+    setTimeout(function(){ if (box.querySelector("iframe")) ok(); else bad(); }, 10000);
+  } catch (e) {
+    bad();
+  }
+})();
+</script>
+</body>
+</html>

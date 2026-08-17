@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Live TradingView advanced chart, dark themed, sized for a Notion embed.">
+<title>Live Chart</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230d1117'/%3E%3Cpath d='M2 12L6 8l3 2 5-6' stroke='%2358a6ff' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --line:#232a33;
+    --ink:#e6edf3; --ink2:#9aa4b2; --muted:#6b7480; --accent:#58a6ff;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  /* Fills the embed and stretches the chart into whatever height Notion gives us. */
+  .wrap{width:100%;max-width:1360px;min-height:100%;margin:0 auto;
+    padding:14px clamp(10px,2.5vw,24px) 16px;display:flex;flex-direction:column;gap:10px}
+  .head{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+  h1{font-size:15px;margin:0;font-weight:650;letter-spacing:.2px}
+  .sym{font:600 11px/1 var(--mono);letter-spacing:.06em;color:var(--accent);
+    border:1px solid #1f3a5f;background:#0e1b2e;border-radius:5px;padding:4px 7px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:8px;flex:1 1 auto;display:flex;flex-direction:column;min-height:320px;overflow:hidden}
+  /* TradingView styles its iframe height:calc(100% - 32px) inline. That percentage
+     cannot resolve here: .card takes its height from flex layout, so it has no
+     *specified* height for a percentage to resolve against, and the iframe falls back
+     to the 150px intrinsic iframe height. Override the inline height and let flex do
+     the sizing instead, which needs no definite parent height. */
+  .tvbox{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
+  .tvbox .tradingview-widget-container__widget{flex:1 1 auto;min-height:0}
+  .tvbox iframe{flex:1 1 auto;min-height:0;display:block;border:0;
+    width:100%!important;height:auto!important}
+  .tvbox .tradingview-widget-copyright{flex:0 0 auto}
+  /* TradingView injects its own !important styles for this once loaded; these only
+     cover the moment before that, and the case where the script never arrives. */
+  .tradingview-widget-copyright{font-size:11px;line-height:1.6;text-align:center;
+    padding:4px 0 0;color:var(--muted)}
+  .tradingview-widget-copyright a{color:var(--muted);text-decoration:none}
+  .tradingview-widget-copyright .blue-text{color:var(--accent)}
+  .tvfail{margin:0;padding:14px 4px;text-align:center;color:var(--ink2);font-size:12.5px;line-height:1.7}
+  .tvfail b{color:var(--ink)}
+  .tvfail span{color:var(--muted);font-size:11.5px}
+  .credit{text-align:center;color:var(--muted);font-size:11px;line-height:1.6;margin:0}
+  .credit a{color:var(--accent);text-decoration:none;border-radius:3px}
+  .credit a:hover{text-decoration:underline}
+  .credit a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  @media(max-width:420px){
+    .wrap{padding:11px 10px 13px}
+    h1{font-size:14px}
+    .card{padding:6px;min-height:280px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>Live Chart</h1>
+    <span class="sym" id="symLabel">BINANCE:BTCUSDT</span>
+  </div>
+
+  <div class="card">
+    <!-- TradingView replaces the script below with its widget, and adopts the
+         copyright block. The block is required by their terms: do not remove it. -->
+    <div class="tradingview-widget-container tvbox" id="tvbox">
+      <div class="tradingview-widget-container__widget"></div>
+      <div class="tradingview-widget-copyright">
+        <a href="https://www.tradingview.com/" rel="noopener nofollow" target="_blank">
+          <span class="blue-text">Track all markets on TradingView</span>
+        </a>
+      </div>
+    </div>
+    <p class="tvfail" id="tvfail" hidden>
+      <b>Chart unavailable right now.</b><br>
+      <span>TradingView could not be reached. Nothing else on this page is affected &mdash; reload once your connection is back.</span>
+    </p>
+  </div>
+
+  <p class="credit">This tool is developed by Ozan Atmar for the <a href="https://www.notion.com/templates/crypto-fx-trading-dashboard" target="_blank" rel="noopener">Crypto/FX Trading Dashboard v2</a> template.</p>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var DEFAULT_SYMBOL = "BINANCE:BTCUSDT";
+  var DEFAULT_INTERVAL = "60";                       // 1h: readable for both crypto and FX
+  // Strict allowlist; this value is serialised into the widget config. "!" is included
+  // because TradingView continuous futures use it (ICEUS:DX1!).
+  var SYMBOL_OK = /^[A-Za-z0-9_.:!\-]{1,32}$/;
+  var INTERVAL_OK = /^(1|3|5|15|30|45|60|120|180|240|D|W|M)$/;
+
+  function q(name){
+    try { return new URLSearchParams(location.search).get(name); } catch (e) { return null; }
+  }
+  function pick(raw, re, fallback){
+    var v = (raw || "").trim();
+    return re.test(v) ? v : fallback;
+  }
+
+  var symbol = pick(q("symbol"), SYMBOL_OK, DEFAULT_SYMBOL).toUpperCase();
+  var interval = pick(q("interval"), INTERVAL_OK, DEFAULT_INTERVAL);
+
+  var label = document.getElementById("symLabel");
+  if (label) label.textContent = symbol;
+  document.title = symbol.replace(/^[A-Z]+:/, "") + " · Live Chart";
+
+  var box = document.getElementById("tvbox");
+  var fail = document.getElementById("tvfail");
+  var settled = false;
+  function ok(){ if (!settled){ settled = true; fail.hidden = true; } }
+  function bad(){ if (!settled){ settled = true; fail.hidden = false; } }
+
+  try {
+    // The widget arrives as an iframe inside the container; watching for it covers the
+    // case where the script loads fine but the widget itself never renders.
+    var seen = new MutationObserver(function(){
+      if (box.querySelector("iframe")){ ok(); seen.disconnect(); }
+    });
+    seen.observe(box, { childList:true, subtree:true });
+
+    var s = document.createElement("script");
+    s.type = "text/javascript";
+    s.async = true;
+    s.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+    s.onerror = bad;
+    // textContent, not innerHTML: the value is never parsed as markup on the way in.
+    s.textContent = JSON.stringify({
+      autosize: true,
+      symbol: symbol,
+      interval: interval,
+      timezone: "Etc/UTC",
+      theme: "dark",
+      style: "1",
+      locale: "en",
+      allow_symbol_change: true,
+      withdateranges: true,
+      hide_side_toolbar: false,
+      save_image: false,
+      backgroundColor: "#0d1117",
+      gridColor: "rgba(35, 42, 51, 0.6)",
+      support_host: "https://www.tradingview.com"
+    });
+    box.appendChild(s);
+
+    setTimeout(function(){ if (box.querySelector("iframe")) ok(); else bad(); }, 10000);
+  } catch (e) {
+    bad();
+  }
+})();
+</script>
+</body>
+</html>

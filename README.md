@@ -9,10 +9,15 @@ browser. Trade Analytics makes zero network requests at all; the spread board ca
 
 ## Contents
 
-| Widget | Path | Data |
-| --- | --- | --- |
-| Trade Analytics (Crypto / FX Trading Dashboard v2) | `template-helpers/Crypto-FX-Trading-Dashboard-v2-trade-analytics/` | Fully client-side |
-| Cross-Exchange Spread (Crypto / FX Trading Dashboard v2) | `template-helpers/Crypto-FX-Trading-Dashboard-v2-cross-exchange-spread/` | Live, via `/api/spread` |
+All widgets belong to the Crypto / FX Trading Dashboard v2 template; folders are prefixed accordingly.
+
+| Widget | Folder suffix | Data | URL config |
+| --- | --- | --- | --- |
+| Trade Analytics | `-trade-analytics` | Fully client-side | — |
+| Cross-Exchange Spread | `-cross-exchange-spread` | Live, via `/api/spread` | `?assets=` |
+| Live Chart | `-live-chart` | TradingView | `?symbol=`, `?interval=` |
+| Ticker Tape | `-ticker-tape` | TradingView | `?symbols=` |
+| Economic Calendar | `-economic-calendar` | TradingView | `?currencies=` |
 
 The root `index.html` is a directory page linking to each widget.
 
@@ -123,6 +128,32 @@ So, for a widget that is already embedded anywhere:
 
 The same applies to `api/spread.js`: an embedded spread board calls `/api/spread` forever, so that route has
 to keep answering. Add `/api/spread-v2.js` for an incompatible response shape rather than changing this one.
+
+## The TradingView-backed widgets
+
+Live Chart, Ticker Tape and Economic Calendar are thin pages: our dark shell plus one official TradingView
+embed widget, loaded client-side from `s3.tradingview.com`. **No API key, no account, no cost** — these are
+TradingView's free public embeds. There is no serverless function behind them.
+
+Each reads its config from its own URL, so the buyer customises by editing the embed link:
+
+```
+.../Crypto-FX-Trading-Dashboard-v2-live-chart/?symbol=BINANCE:ETHUSDT&interval=240
+.../Crypto-FX-Trading-Dashboard-v2-ticker-tape/?symbols=BINANCE:BTCUSDT,FX:EURUSD
+.../Crypto-FX-Trading-Dashboard-v2-economic-calendar/?currencies=USD,EUR
+```
+
+Values are validated against a strict allowlist before being serialised into the widget config; anything
+unrecognised falls back to the default rather than being passed through.
+
+Two things to know:
+
+- **TradingView is an external dependency.** These three widgets need TradingView's CDN and servers, unlike
+  the other two. If TradingView is unreachable, each page still renders its shell and credit line and shows
+  a short "unavailable right now" note instead of a blank frame or a thrown error.
+- **Their attribution must stay.** Each page ships the `tradingview-widget-copyright` block ("Track all
+  markets on TradingView"). TradingView's embed terms require it, and their script styles that block itself
+  once loaded. Do not remove it.
 
 ## Choosing pairs on the spread board
 
