@@ -147,6 +147,25 @@ A venue that fails, times out or returns junk lands in `errors` and is dropped f
 fails the response. The browser calls only this same-origin endpoint, never an exchange directly, which
 sidesteps CORS and keeps caching in one place.
 
+### Deployment Protection must be off
+
+Vercel enables **Vercel Authentication** on some new projects. While it is on, every `.vercel.app` URL
+302-redirects to a Vercel login, so a Notion embed shows a login page instead of the widget and
+`/api/spread` never answers a visitor. It also suppresses edge caching, which removes the flat-cost
+property described below.
+
+Turn it off at **Project → Settings → Deployment Protection → Vercel Authentication → Disabled**, then
+confirm with an unauthenticated request:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://<your-vercel-domain>/api/spread
+# want 200, not 302
+```
+
+These widgets are public read-only tools with no auth, no cookies and no server state, so there is nothing
+for protection to protect. If you would rather keep `.vercel.app` locked, the setting
+`all_except_custom_domains` lets you attach your own domain and serve the widgets from there instead.
+
 ### The function must run in the EU — do not remove the region pin
 
 `vercel.json` contains:
