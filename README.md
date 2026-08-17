@@ -133,13 +133,15 @@ embed:
   stripped) and press **Add**. The symbol is checked against the exchanges first, so a typo shows
   *"no market for X on these exchanges"* rather than adding a dead row. Each row has an **×** to remove it.
   Maximum 8 pairs; at least 1 must remain.
-- **In the URL:** `.../Crypto-FX-Trading-Dashboard-v2-cross-exchange-spread/?assets=DOGE,ADA` renders exactly
-  those. This is the durable form — the widget rewrites its own URL as pairs change and shows a read-only
-  **Embed URL** field to paste into Notion.
+- **In the embed URL:** `.../Crypto-FX-Trading-Dashboard-v2-cross-exchange-spread/?assets=DOGE,ADA` renders
+  exactly those. This is how the **template owner** fixes the default set: append `?assets=` to the URL
+  before pasting it into the `/embed` block. The widget keeps its own address bar in sync as pairs change,
+  so you can set a list in the widget, open it directly, and copy the resulting URL.
 
-The pair list is also mirrored to `localStorage` and used when the URL carries no `?assets`, but that is a
-convenience only: browsers can block storage in a third-party iframe, so **the URL is the setting that
-actually persists for a buyer.** Tell buyers to copy the Embed URL.
+The pair list is also mirrored to `localStorage`, which is what makes a reader's own additions survive a
+reload. Note the limit: browsers can block storage in a third-party iframe, and the widget deliberately does
+not surface its own URL to the reader, so **a reader's changes are session-scoped and not guaranteed to
+persist.** Anything that must stick belongs in the `?assets=` of the embedded URL.
 
 ## The price API: `/api/spread`
 

@@ -65,13 +65,7 @@
     width:18px;height:18px;padding:0;margin-left:8px;font:12px/1 var(--mono);cursor:pointer;
     vertical-align:middle}
   .rm:hover{color:var(--neg);border-color:#5f2020}
-  .embedbox{margin-top:12px;border-top:1px solid var(--line);padding-top:11px}
-  .embedbox label{display:block;font-size:10.5px;color:var(--muted);text-transform:uppercase;
-    letter-spacing:.05em;margin-bottom:5px}
-  .embedurl{width:100%;background:#0b1017;color:var(--ink2);border:1px solid var(--line);
-    border-radius:7px;padding:7px 9px;font:11.5px var(--mono)}
-  .embedhint{font-size:11px;color:var(--muted);margin:6px 0 0}
-  .pairbar input:focus-visible,.btn:focus-visible,.rm:focus-visible,.embedurl:focus-visible{
+  .pairbar input:focus-visible,.btn:focus-visible,.rm:focus-visible{
     outline:2px solid var(--accent);outline-offset:2px}
 
   .tablewrap{overflow-x:auto}
@@ -160,13 +154,6 @@
       </table>
     </div>
     <p class="note" id="note" role="status" aria-live="polite"></p>
-
-    <div class="embedbox">
-      <label for="embedUrl">Embed URL</label>
-      <input id="embedUrl" class="embedurl" type="text" readonly spellcheck="false"
-             aria-describedby="embedHint">
-      <p class="embedhint" id="embedHint">Paste this as your Notion embed to keep these pairs.</p>
-    </div>
   </div>
 
   <p class="foot"><b>Spot mid prices, public exchange APIs, cached ~10s.</b> Prices are indicative, not executable quotes; a venue that fails to answer is shown as &ldquo;&mdash;&rdquo; and left out of that row&rsquo;s spread. <span id="asof"></span></p>
@@ -444,12 +431,12 @@ function setPairMsg(text, kind){
   pairMsg.className = "pairmsg" + (kind ? " " + kind : "");
 }
 
-// Mirrors the pair list into the address bar and the copyable embed field. Built from
-// origin + pathname so the field is right even where replaceState is not permitted.
+// Mirrors the pair list into the widget's own address bar. Inside a Notion embed that
+// URL is not visible to the reader; it matters when the widget is opened directly and
+// when the template owner builds the embed link.
 function syncUrl(){
   const qs = "?assets=" + pairs.join(",");
   try { history.replaceState(null, "", location.pathname + qs); } catch (_) { /* sandboxed */ }
-  el("embedUrl").value = location.origin + location.pathname + qs;
 }
 
 function updatePairControls(){
@@ -527,10 +514,6 @@ tbl.addEventListener("click", e => {
   const btn = e.target.closest("[data-rm]");
   if (btn) removePair(btn.dataset.rm);
 });
-// Selecting the whole embed URL on focus makes copy a single keystroke; the async
-// clipboard API is unreliable inside a cross-origin iframe, so this is the fallback.
-el("embedUrl").addEventListener("focus", e => e.target.select());
-
 commitPairs();
 
 let poll = setInterval(load, REFRESH_MS);
