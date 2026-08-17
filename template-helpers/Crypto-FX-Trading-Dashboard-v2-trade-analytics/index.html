@@ -27,7 +27,9 @@
   .chip{font:600 10px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;
     color:var(--accent);border:1px solid #1f3a5f;background:#0e1b2e;border-radius:5px;padding:4px 7px}
   .sub{color:var(--muted);font-size:12.5px;margin:3px 0 16px}
-  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:9px;margin-bottom:14px}
+  /* Deterministic KPI grid: 1 col < 420px, 2 cols 420-680px, 3 cols >= 680px.
+     Fixed counts keep the six tiles in even rows instead of orphaning one. */
+  .kpis{display:grid;grid-template-columns:1fr;gap:9px;margin-bottom:14px}
   .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
   .kpi .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
   .kpi .v{font:600 20px/1.1 var(--mono);letter-spacing:.3px}
@@ -70,12 +72,14 @@
   @media(max-width:420px){
     .wrap{padding:16px 12px 24px}
     h1{font-size:16px}
-    .kpis{grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:7px}
+    .kpis{gap:7px}
     .kpi{padding:9px 10px}
     .kpi .v{font-size:17px}
     .card{padding:12px 11px}
     details{padding:10px 11px}
   }
+  @media(min-width:420px){.kpis{grid-template-columns:repeat(2,1fr)}}
+  @media(min-width:680px){.kpis{grid-template-columns:repeat(3,1fr)}}
   @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>

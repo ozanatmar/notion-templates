@@ -6,7 +6,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "frame-ancestors https://*.notion.so https://*.notion.site https://www.notion.so 'self'"
+          "value": "frame-ancestors *"
         },
         {
           "key": "X-Content-Type-Options",

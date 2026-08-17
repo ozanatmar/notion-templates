@@ -103,14 +103,16 @@ requests, and add a row to the list in the root `index.html` and to the table ab
 
 ## Framing headers
 
-`vercel.json` sets `Content-Security-Policy: frame-ancestors https://*.notion.so https://*.notion.site
-https://www.notion.so 'self'` and deliberately sends **no** `X-Frame-Options`, so Notion can frame the
-widgets while other sites cannot.
+`vercel.json` sets `Content-Security-Policy: frame-ancestors *` and deliberately sends **no**
+`X-Frame-Options`, so any page can frame these widgets.
 
-One caveat worth knowing: if you publish a Notion site on your **own custom domain**, that domain is not in
-the list and the browser will refuse to frame the widget there. Fix it by adding your domain to the
-`frame-ancestors` value in `vercel.json`, or by deleting the `Content-Security-Policy` entry entirely to
-allow framing from anywhere.
+That is intentional. These are free, public, read-only tools with no auth, no cookies and no server state,
+so there is nothing for a hostile framer to hijack — and an origin allowlist would break the surfaces we
+actually want to support. Notion embeds can appear on `notion.so`, on `notion.site` published pages, and on
+**custom domains** that Notion customers own, which no fixed list can enumerate.
+
+If you ever add a widget that handles a secret, a session, or anything worth clickjacking, do not reuse this
+header. Give that widget its own path-scoped `frame-ancestors` entry listing the origins it trusts.
 
 ## Trade Analytics — what it computes
 
