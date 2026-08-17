@@ -124,6 +124,23 @@ So, for a widget that is already embedded anywhere:
 The same applies to `api/spread.js`: an embedded spread board calls `/api/spread` forever, so that route has
 to keep answering. Add `/api/spread-v2.js` for an incompatible response shape rather than changing this one.
 
+## Choosing pairs on the spread board
+
+The board shows BTC, ETH and SOL by default. A buyer can change that set, and the choice travels with the
+embed:
+
+- **In the widget:** type a base symbol (`DOGE`, or a full pair like `DOGE/USDT` — the quote suffix is
+  stripped) and press **Add**. The symbol is checked against the exchanges first, so a typo shows
+  *"no market for X on these exchanges"* rather than adding a dead row. Each row has an **×** to remove it.
+  Maximum 8 pairs; at least 1 must remain.
+- **In the URL:** `.../Crypto-FX-Trading-Dashboard-v2-cross-exchange-spread/?assets=DOGE,ADA` renders exactly
+  those. This is the durable form — the widget rewrites its own URL as pairs change and shows a read-only
+  **Embed URL** field to paste into Notion.
+
+The pair list is also mirrored to `localStorage` and used when the URL carries no `?assets`, but that is a
+convenience only: browsers can block storage in a third-party iframe, so **the URL is the setting that
+actually persists for a buyer.** Tell buyers to copy the Embed URL.
+
 ## The price API: `/api/spread`
 
 A single Vercel Node function backs the spread board. **No API keys, no accounts, no environment

@@ -46,6 +46,30 @@
   .card h2{font-size:12px;margin:0 0 2px;color:var(--ink2);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
   .card .cap{font-size:11.5px;color:var(--muted);margin:0 0 10px}
 
+  .pairbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 11px}
+  .pairbar input{background:#0b1017;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+    padding:7px 9px;font:12px var(--mono);width:150px}
+  .pairbar input::placeholder{color:var(--muted)}
+  .pairbar input:disabled{opacity:.5}
+  .btn{background:var(--accent);color:#04101f;border:none;border-radius:7px;padding:7px 14px;
+    font:600 12.5px/1 inherit;cursor:pointer}
+  .btn:disabled{opacity:.5;cursor:default}
+  .pairmsg{font:11px var(--mono);color:var(--muted)}
+  .pairmsg.err{color:var(--neg)}
+  .pairmsg.ok{color:var(--pos)}
+  .rm{background:none;border:1px solid var(--line);color:var(--muted);border-radius:4px;
+    width:18px;height:18px;padding:0;margin-left:8px;font:12px/1 var(--mono);cursor:pointer;
+    vertical-align:middle}
+  .rm:hover{color:var(--neg);border-color:#5f2020}
+  .embedbox{margin-top:12px;border-top:1px solid var(--line);padding-top:11px}
+  .embedbox label{display:block;font-size:10.5px;color:var(--muted);text-transform:uppercase;
+    letter-spacing:.05em;margin-bottom:5px}
+  .embedurl{width:100%;background:#0b1017;color:var(--ink2);border:1px solid var(--line);
+    border-radius:7px;padding:7px 9px;font:11.5px var(--mono)}
+  .embedhint{font-size:11px;color:var(--muted);margin:6px 0 0}
+  .pairbar input:focus-visible,.btn:focus-visible,.rm:focus-visible,.embedurl:focus-visible{
+    outline:2px solid var(--accent);outline-offset:2px}
+
   .tablewrap{overflow-x:auto}
   table{width:100%;border-collapse:collapse;font:12px/1.5 var(--mono)}
   th,td{text-align:right;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -114,12 +138,28 @@
   <div class="card">
     <h2>Mid price by venue</h2>
     <p class="cap">Mid = (best bid + best ask) / 2. <span class="tag low">low</span> is the cheapest venue, <span class="tag high">high</span> the richest.</p>
+
+    <div class="pairbar">
+      <label class="sr-only" for="pairInput">Add a pair by base symbol</label>
+      <input id="pairInput" type="text" placeholder="Add a pair, e.g. DOGE" maxlength="16"
+             autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <button class="btn" id="addBtn" type="button">Add</button>
+      <span class="pairmsg" id="pairMsg" role="status" aria-live="polite"></span>
+    </div>
+
     <div class="tablewrap">
       <table id="tbl">
         <caption class="sr-only">Mid price per exchange for each asset, with the cheapest and richest venue tagged and the spread between them.</caption>
       </table>
     </div>
     <p class="note" id="note" role="status" aria-live="polite"></p>
+
+    <div class="embedbox">
+      <label for="embedUrl">Embed URL</label>
+      <input id="embedUrl" class="embedurl" type="text" readonly spellcheck="false"
+             aria-describedby="embedHint">
+      <p class="embedhint" id="embedHint">Paste this as your Notion embed to keep these pairs.</p>
+    </div>
   </div>
 
   <p class="foot"><b>Spot mid prices, public exchange APIs, cached ~10s.</b> Prices are indicative, not executable quotes; a venue that fails to answer is shown as &ldquo;&mdash;&rdquo; and left out of that row&rsquo;s spread. <span id="asof"></span></p>
@@ -128,7 +168,9 @@
 </div>
 
 <script>
-const ENDPOINT = "/api/spread?assets=BTC,ETH,SOL";
+const DEFAULT_PAIRS = ["BTC", "ETH", "SOL"];
+const MAX_PAIRS = 8;
+const STORE_KEY = "cxs.pairs";
 const REFRESH_MS = 12000;
 const FETCH_TIMEOUT_MS = 9000;
 // Preferred column order; anything the API returns beyond this is appended.
@@ -142,9 +184,12 @@ function fmtPx(v){
   const d = v >= 100 ? 2 : v >= 1 ? 4 : 6;
   return v.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
 }
+// Decimals scale down to the asset. A custom pair can be a sub-cent coin, where a
+// real spread is worth fractions of a cent: at two decimals DOGE reads "$0.00"
+// next to a live 0.043%, which looks broken.
 function fmtMoney(v){
   const a = Math.abs(v);
-  const max = a >= 1 ? 2 : 4;
+  const max = a >= 1 ? 2 : a >= 0.01 ? 4 : 8;
   return "$" + a.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:max});
 }
 // 0.38% for wide spreads, 0.016% for tight ones: two decimals hides BTC entirely.
@@ -153,6 +198,53 @@ const pad2 = n => String(n).padStart(2,"0");
 
 const el = id => document.getElementById(id);
 const tbl = el("tbl"), note = el("note"), chip = el("chip"), chipText = el("chipText");
+
+/* ---- pair list -------------------------------------------------------------
+   Resolution order on load: the widget's own ?assets= query, then localStorage,
+   then the defaults. The URL wins because that is what a buyer actually embeds;
+   storage is only a convenience for a plain, un-parameterised embed URL.        */
+
+const VALID_SYM = /^[A-Z0-9]{1,12}$/;   // mirrors the guard in api/spread.js
+
+function parsePairs(raw){
+  if (!raw) return [];
+  const out = [];
+  for (const part of String(raw).split(",")){
+    const s = part.trim().toUpperCase();
+    if (VALID_SYM.test(s) && !out.includes(s)) out.push(s);
+  }
+  return out.slice(0, MAX_PAIRS);
+}
+
+// Accepts a base symbol or a full pair and keeps the base: BTC/USDT, BTC-USDT,
+// BTC/USD and BTC-USD all reduce to BTC, as does a concatenated BTCUSDT. The
+// offset guard stops a bare "USD" or "USDT" being reduced to nothing.
+function normalizeSymbol(raw){
+  let s = String(raw || "").trim().toUpperCase().replace(/\s+/g, "");
+  s = s.replace(/[\/\-_:](USDT|USDC|USD)$/, "");
+  s = s.replace(/(USDT|USD)$/, (m, _g, off) => (off >= 2 ? "" : m));
+  return VALID_SYM.test(s) ? s : "";
+}
+
+// Storage can throw in a sandboxed or cookie-blocked iframe. It is a nicety, never
+// a dependency, so every access is swallowed.
+function readStore(){
+  try { return localStorage.getItem(STORE_KEY); } catch (_) { return null; }
+}
+function writeStore(){
+  try { localStorage.setItem(STORE_KEY, pairs.join(",")); } catch (_) { /* ignore */ }
+}
+
+function initialPairs(){
+  let p = [];
+  try { p = parsePairs(new URLSearchParams(location.search).get("assets")); } catch (_) { p = []; }
+  if (p.length) return p;
+  p = parsePairs(readStore());
+  return p.length ? p : DEFAULT_PAIRS.slice();
+}
+
+let pairs = initialPairs();
+const endpoint = () => "/api/spread?assets=" + pairs.join(",");
 
 let lastGood = null;     // last successful payload, kept so a failed poll never blanks the board
 let lastAsOf = null;     // Date of the last successful snapshot
@@ -191,6 +283,9 @@ function buildSkeleton(cols, assets){
   const key = cols.join("|") + "::" + assets.join("|");
   if (key === skeletonKey) return;
   skeletonKey = key;
+  // Every cell is new after a rebuild, so suppress the change-flash for this paint;
+  // otherwise adding one pair lights up the whole board.
+  firstPaint = true;
   cells = new Map();
   spreadCells = new Map();
 
@@ -199,7 +294,8 @@ function buildSkeleton(cols, assets){
   }<th scope="col">Spread</th></tr></thead>`;
 
   const body = `<tbody>${assets.map(a => `<tr data-a="${esc(a)}">
-    <td class="asset">${esc(a)} <span class="q">/ USDT</span></td>
+    <td class="asset">${esc(a)} <span class="q">/ USDT</span><button class="rm" type="button"
+      data-rm="${esc(a)}" title="Remove ${esc(a)}" aria-label="Remove ${esc(a)}">&times;</button></td>
     ${cols.map(c => `<td data-cell="${esc(a)}|${esc(c)}"><span class="px na">&mdash;</span></td>`).join("")}
     <td class="spread" data-spread="${esc(a)}"><span class="none">&mdash;</span></td>
   </tr>`).join("")}</tbody>`;
@@ -307,9 +403,10 @@ async function load(){
   try {
     // no-store keeps the *browser* from serving its own stale copy (the response's
     // s-maxage targets shared caches, so a private cache would otherwise heuristically
-    // reuse it). The URL stays constant, so Vercel's edge cache still absorbs the load
-    // and the exchanges see roughly one round of calls per 10s globally.
-    const res = await fetch(ENDPOINT, {
+    // reuse it). The URL is constant for a given pair set, so every viewer sharing a
+    // set shares one edge cache entry and the exchanges see about one round of calls
+    // per 10s for it, however many people are watching.
+    const res = await fetch(endpoint(), {
       signal: ctl.signal, cache: "no-store", headers: { Accept: "application/json" }
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -329,6 +426,105 @@ async function load(){
     tickAge();
   }
 }
+
+/* ---- pair controls --------------------------------------------------------- */
+
+const pairInput = el("pairInput"), addBtn = el("addBtn"), pairMsg = el("pairMsg");
+let probing = false;
+
+function setPairMsg(text, kind){
+  pairMsg.textContent = text || "";
+  pairMsg.className = "pairmsg" + (kind ? " " + kind : "");
+}
+
+// Mirrors the pair list into the address bar and the copyable embed field. Built from
+// origin + pathname so the field is right even where replaceState is not permitted.
+function syncUrl(){
+  const qs = "?assets=" + pairs.join(",");
+  try { history.replaceState(null, "", location.pathname + qs); } catch (_) { /* sandboxed */ }
+  el("embedUrl").value = location.origin + location.pathname + qs;
+}
+
+function updatePairControls(){
+  const atCap = pairs.length >= MAX_PAIRS;
+  pairInput.disabled = atCap;
+  addBtn.disabled = atCap || probing;
+  if (atCap) setPairMsg("max 8 pairs", "");
+  else if (pairMsg.textContent === "max 8 pairs") setPairMsg("");
+}
+
+function commitPairs(){
+  writeStore();
+  syncUrl();
+  updatePairControls();
+}
+
+async function addPair(){
+  if (probing || pairs.length >= MAX_PAIRS) { updatePairControls(); return; }
+  const sym = normalizeSymbol(pairInput.value);
+  if (!sym){ setPairMsg("enter a symbol, e.g. DOGE", "err"); return; }
+  if (pairs.includes(sym)){ setPairMsg(sym + " is already on the board", ""); return; }
+
+  probing = true;
+  addBtn.disabled = true;
+  setPairMsg("checking " + sym + "…", "");
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS);
+  try {
+    // Probe the symbol on its own before committing, so a typo never lands a broken row.
+    const res = await fetch("/api/spread?assets=" + encodeURIComponent(sym), {
+      signal: ctl.signal, cache: "no-store", headers: { Accept: "application/json" }
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    const row = data && Array.isArray(data.assets) ? data.assets[0] : null;
+    const n = row && Array.isArray(row.venues) ? row.venues.length : 0;
+    if (n >= 1){
+      pairs.push(sym);
+      pairInput.value = "";
+      commitPairs();
+      setPairMsg(sym + " added · " + n + " venue" + (n === 1 ? "" : "s"), "ok");
+      await load();
+    } else {
+      setPairMsg("no market for " + sym + " on these exchanges", "err");
+    }
+  } catch (_) {
+    setPairMsg("could not check " + sym + ", try again", "err");
+  } finally {
+    clearTimeout(timer);
+    probing = false;
+    updatePairControls();
+  }
+}
+
+function removePair(sym){
+  if (pairs.length <= 1){ setPairMsg("at least one pair is required", "err"); return; }
+  const i = pairs.indexOf(sym);
+  if (i < 0) return;
+  pairs.splice(i, 1);
+  commitPairs();
+  setPairMsg(sym + " removed", "");
+  // Drop the row now so the board matches the list without waiting for the fetch.
+  const tr = tbl.querySelector('tr[data-a="' + sym + '"]');
+  if (tr) tr.remove();
+  skeletonKey = "";
+  load();
+}
+
+addBtn.addEventListener("click", addPair);
+pairInput.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); addPair(); } });
+pairInput.addEventListener("input", () => {
+  if (pairMsg.classList.contains("err") || pairMsg.classList.contains("ok")) setPairMsg("");
+});
+tbl.addEventListener("click", e => {
+  const btn = e.target.closest("[data-rm]");
+  if (btn) removePair(btn.dataset.rm);
+});
+// Selecting the whole embed URL on focus makes copy a single keystroke; the async
+// clipboard API is unreliable inside a cross-origin iframe, so this is the fallback.
+el("embedUrl").addEventListener("focus", e => e.target.select());
+
+commitPairs();
 
 let poll = setInterval(load, REFRESH_MS);
 setInterval(tickAge, 1000);
