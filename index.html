@@ -41,7 +41,7 @@
 <body>
 <div class="wrap">
   <h1>Notion Template Helpers</h1>
-  <p class="sub">Self-contained widgets meant to be embedded in a Notion page with <code>/embed</code>. No backend, no accounts, no tracking &mdash; everything runs in your browser.</p>
+  <p class="sub">Widgets meant to be embedded in a Notion page with <code>/embed</code>. No accounts, no tracking, no API keys. Everything is computed in your browser; live prices come from this site's own cached endpoint.</p>
 
   <h2>Widgets</h2>
   <ul>
@@ -52,11 +52,18 @@
         <div class="p">/template-helpers/Crypto-FX-Trading-Dashboard-v2-trade-analytics/</div>
       </a>
     </li>
+    <li>
+      <a class="card" href="./template-helpers/Crypto-FX-Trading-Dashboard-v2-cross-exchange-spread/">
+        <div class="t">Cross-Exchange Spread &mdash; Crypto / FX Trading Dashboard v2</div>
+        <div class="d">Live board showing the same asset priced across Binance, Bybit, OKX, Kraken and Coinbase at once, with the cheapest and richest venue and the spread between them.</div>
+        <div class="p">/template-helpers/Crypto-FX-Trading-Dashboard-v2-cross-exchange-spread/</div>
+      </a>
+    </li>
   </ul>
 
   <p class="foot">
     <b>How to embed.</b> Open a widget, copy its URL, then in Notion type <code>/embed</code>, paste the URL and drag the block to the height you want.<br>
-    <b>Privacy.</b> Every widget computes entirely client-side. Data you paste stays in the browser tab and is never sent anywhere.
+    <b>Privacy.</b> Widgets compute in your browser. Data you paste stays in the browser tab and is never sent anywhere. The spread board reads public exchange prices through this site's own cached endpoint &mdash; it sends nothing about you.
   </p>
 </div>
 </body>

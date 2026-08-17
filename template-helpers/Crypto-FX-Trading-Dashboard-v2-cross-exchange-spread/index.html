@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Live cross-exchange spread board: one asset priced across several exchanges at once, with the cheapest and richest venue highlighted.">
+<meta name="robots" content="index, follow">
+<title>Cross-Exchange Spread</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230d1117'/%3E%3Cpath d='M2 5h12M2 11h12' stroke='%2358a6ff' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='5' cy='5' r='2' fill='%233fb950'/%3E%3Ccircle cx='11' cy='11' r='2' fill='%23f85149'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#0f141a; --line:#232a33; --grid:#20262e;
+    --ink:#e6edf3; --ink2:#9aa4b2; --muted:#6b7480;
+    --pos:#3fb950; --neg:#f85149; --accent:#58a6ff;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  /* Fills the embed width. Side padding scales with the viewport; the max-width only
+     stops the layout stretching absurdly on an ultrawide screen. */
+  .wrap{width:100%;max-width:1360px;margin:0 auto;padding:20px clamp(12px,3vw,32px) 30px}
+  .head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:2px}
+  h1{font-size:18px;margin:0;letter-spacing:.2px;font-weight:650}
+  .chip{display:inline-flex;align-items:center;gap:6px;font:600 10px/1 var(--mono);
+    letter-spacing:.08em;text-transform:uppercase;color:var(--accent);
+    border:1px solid #1f3a5f;background:#0e1b2e;border-radius:5px;padding:4px 7px}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--pos);flex:none;
+    animation:pulse 2s ease-in-out infinite}
+  .chip.stale{color:var(--neg);border-color:#5f2020;background:#2a0e0e}
+  .chip.stale .dot{background:var(--neg);animation:none}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .age{font:11px var(--mono);color:var(--muted)}
+  .sub{color:var(--muted);font-size:12.5px;margin:3px 0 16px}
+
+  .strip{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:11px 14px;margin-bottom:12px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .strip .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .strip .val{font:600 15px/1.2 var(--mono)}
+  .strip .det{font:12px var(--mono);color:var(--ink2)}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 15px;margin-bottom:12px}
+  .card h2{font-size:12px;margin:0 0 2px;color:var(--ink2);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+  .card .cap{font-size:11.5px;color:var(--muted);margin:0 0 10px}
+
+  .tablewrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font:12px/1.5 var(--mono)}
+  th,td{text-align:right;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{color:var(--muted);font-weight:600;text-transform:uppercase;font-size:10.5px;letter-spacing:.04em}
+  /* The asset column stays put while the venue columns scroll on a narrow embed. */
+  td:first-child,th:first-child{text-align:left;position:sticky;left:0;background:var(--panel);z-index:1}
+  tbody tr:last-child td{border-bottom:none}
+  .asset{font-weight:700;font-size:13px}
+  .asset .q{color:var(--muted);font-weight:400;font-size:11px}
+  .px{font-variant-numeric:tabular-nums}
+  .na{color:var(--muted)}
+  .tag{display:inline-block;font-size:9.5px;line-height:1.4;padding:0 5px;border-radius:4px;
+    border:1px solid var(--line);color:var(--ink2);margin-left:6px;text-transform:uppercase;letter-spacing:.04em}
+  .tag.low{color:var(--pos);border-color:#1d4427}
+  .tag.high{color:var(--neg);border-color:#5f2020}
+  .tag.alt{color:var(--accent);border-color:#1f3a5f}
+  td.low .px{color:var(--pos)}
+  td.high .px{color:var(--neg)}
+  .spread .pct{font-weight:700}
+  .spread .gap{color:var(--ink2);font-size:11px}
+  .spread .arb{color:var(--accent);font-size:11px}
+  .spread .none{color:var(--muted);font-weight:400}
+  .cellstack{display:flex;flex-direction:column;align-items:flex-end;gap:1px}
+  @keyframes flashcell{from{background:rgba(88,166,255,.20)}to{background:transparent}}
+  td.flash{animation:flashcell .7s ease-out}
+
+  .note{font:11px var(--mono);color:var(--neg);margin:10px 0 0;min-height:1em}
+  .note:empty{display:none}
+  .foot{color:var(--muted);font-size:11px;margin-top:14px;line-height:1.6}
+  .foot b{color:var(--ink2)}
+  .credit{text-align:center;color:var(--muted);font-size:11px;line-height:1.6;margin:16px 0 0}
+  .credit a{color:var(--accent);text-decoration:none;border-radius:3px}
+  .credit a:hover{text-decoration:underline}
+  .credit a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+    clip:rect(0 0 0 0);white-space:nowrap;border:0}
+  @media(max-width:420px){
+    .wrap{padding-top:16px;padding-bottom:24px}
+    h1{font-size:16px}
+    .card{padding:12px 11px}
+    .strip{padding:10px 11px}
+    th,td{padding:7px 8px}
+  }
+  @media(prefers-reduced-motion:reduce){
+    *{transition:none!important}
+    .dot{animation:none}
+    td.flash{animation:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>Cross-Exchange Spread</h1>
+    <span class="chip" id="chip"><i class="dot"></i><span id="chipText">live</span></span>
+    <span class="age" id="age">connecting&hellip;</span>
+  </div>
+  <p class="sub">The same asset priced on several exchanges at once. Spread is the gap between the cheapest and the richest venue.</p>
+
+  <div class="strip">
+    <span class="lbl">Widest spread</span>
+    <span class="val" id="stripVal">&mdash;</span>
+    <span class="det" id="stripDet">waiting for data</span>
+  </div>
+
+  <div class="card">
+    <h2>Mid price by venue</h2>
+    <p class="cap">Mid = (best bid + best ask) / 2. <span class="tag low">low</span> is the cheapest venue, <span class="tag high">high</span> the richest.</p>
+    <div class="tablewrap">
+      <table id="tbl">
+        <caption class="sr-only">Mid price per exchange for each asset, with the cheapest and richest venue tagged and the spread between them.</caption>
+      </table>
+    </div>
+    <p class="note" id="note" role="status" aria-live="polite"></p>
+  </div>
+
+  <p class="foot"><b>Spot mid prices, public exchange APIs, cached ~10s.</b> Prices are indicative, not executable quotes; a venue that fails to answer is shown as &ldquo;&mdash;&rdquo; and left out of that row&rsquo;s spread. <span id="asof"></span></p>
+
+  <p class="credit">This tool is developed by Ozan Atmar for the <a href="https://www.notion.com/templates/crypto-fx-trading-dashboard" target="_blank" rel="noopener">Crypto/FX Trading Dashboard v2</a> template.</p>
+</div>
+
+<script>
+const ENDPOINT = "/api/spread?assets=BTC,ETH,SOL";
+const REFRESH_MS = 12000;
+const FETCH_TIMEOUT_MS = 9000;
+// Preferred column order; anything the API returns beyond this is appended.
+const VENUE_ORDER = ["Binance", "Bybit", "OKX", "Kraken", "Coinbase"];
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+// Prices span 60,000 to 0.5, so decimals follow magnitude. Venue differences are
+// often in the last place, which is exactly what this board exists to show.
+function fmtPx(v){
+  const d = v >= 100 ? 2 : v >= 1 ? 4 : 6;
+  return v.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
+}
+function fmtMoney(v){
+  const a = Math.abs(v);
+  const max = a >= 1 ? 2 : 4;
+  return "$" + a.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:max});
+}
+// 0.38% for wide spreads, 0.016% for tight ones: two decimals hides BTC entirely.
+const fmtPct = p => (p >= 0.1 ? p.toFixed(2) : p.toFixed(3)) + "%";
+const pad2 = n => String(n).padStart(2,"0");
+
+const el = id => document.getElementById(id);
+const tbl = el("tbl"), note = el("note"), chip = el("chip"), chipText = el("chipText");
+
+let lastGood = null;     // last successful payload, kept so a failed poll never blanks the board
+let lastAsOf = null;     // Date of the last successful snapshot
+let skeletonKey = "";    // rebuild the table only when the asset/venue set changes
+let cells = new Map();   // "ASSET|Venue" -> <td>
+let spreadCells = new Map();
+let firstPaint = true;
+
+function computeRow(a){
+  const venues = (a.venues || []).filter(v => Number.isFinite(v.mid));
+  if (venues.length < 2) return { venues, ok:false };
+  let lo = venues[0], hi = venues[0];
+  for (const v of venues){ if (v.mid < lo.mid) lo = v; if (v.mid > hi.mid) hi = v; }
+  const gap = hi.mid - lo.mid;
+  const pct = lo.mid > 0 ? gap / lo.mid * 100 : 0;
+  // Theoretical arb: buy at the lowest ask, sell into the highest bid.
+  const bestBid = Math.max(...venues.map(v => v.bid));
+  const bestAsk = Math.min(...venues.map(v => v.ask));
+  return { venues, ok:true, lo, hi, gap, pct, arb: bestBid - bestAsk,
+           loText: fmtPx(lo.mid), hiText: fmtPx(hi.mid) };
+}
+
+function columnsFor(payload){
+  const seen = new Set();
+  for (const a of payload.assets || []){
+    for (const v of a.venues || []) seen.add(v.exchange);
+    // Failed venues still deserve a column, so the outage is visible rather than silent.
+    for (const e of a.errors || []) if (e.exchange && e.exchange !== "*") seen.add(e.exchange);
+  }
+  const ordered = VENUE_ORDER.filter(v => seen.has(v));
+  for (const v of [...seen].sort()) if (!ordered.includes(v)) ordered.push(v);
+  return ordered;
+}
+
+function buildSkeleton(cols, assets){
+  const key = cols.join("|") + "::" + assets.join("|");
+  if (key === skeletonKey) return;
+  skeletonKey = key;
+  cells = new Map();
+  spreadCells = new Map();
+
+  const head = `<thead><tr><th scope="col">Asset</th>${
+    cols.map(c => `<th scope="col">${esc(c)}</th>`).join("")
+  }<th scope="col">Spread</th></tr></thead>`;
+
+  const body = `<tbody>${assets.map(a => `<tr data-a="${esc(a)}">
+    <td class="asset">${esc(a)} <span class="q">/ USDT</span></td>
+    ${cols.map(c => `<td data-cell="${esc(a)}|${esc(c)}"><span class="px na">&mdash;</span></td>`).join("")}
+    <td class="spread" data-spread="${esc(a)}"><span class="none">&mdash;</span></td>
+  </tr>`).join("")}</tbody>`;
+
+  const caption = tbl.querySelector("caption");
+  tbl.innerHTML = (caption ? caption.outerHTML : "") + head + body;
+  tbl.querySelectorAll("[data-cell]").forEach(td => cells.set(td.dataset.cell, td));
+  tbl.querySelectorAll("[data-spread]").forEach(td => spreadCells.set(td.dataset.spread, td));
+}
+
+function flash(td){
+  if (firstPaint) return;
+  td.classList.remove("flash");
+  void td.offsetWidth;          // restart the animation
+  td.classList.add("flash");
+}
+
+function paint(payload){
+  const assets = (payload.assets || []).map(a => a.asset);
+  const cols = columnsFor(payload);
+  buildSkeleton(cols, assets);
+
+  let widest = null;
+  for (const a of payload.assets || []){
+    const row = computeRow(a);
+    const byVenue = new Map(row.venues.map(v => [v.exchange, v]));
+
+    for (const c of cols){
+      const td = cells.get(a.asset + "|" + c);
+      if (!td) continue;
+      const v = byVenue.get(c);
+      td.classList.remove("low","high");
+      if (!v){
+        if (td.dataset.v !== "na"){ td.dataset.v = "na"; td.innerHTML = `<span class="px na">&mdash;</span>`; }
+        const err = (a.errors || []).find(e => e.exchange === c);
+        td.title = err ? `${c}: ${err.reason}` : `${c}: no quote`;
+        continue;
+      }
+      const text = fmtPx(v.mid);
+      // Colour is a second signal only; the low/high tag carries the meaning.
+      // Tag on the *displayed* price so tied venues are all marked: labelling one of
+      // four identical numbers "low" reads as an error. If the extremes round to the
+      // same string the spread is nil at this precision, so tag nothing.
+      const tied = row.ok && row.loText === row.hiText;
+      const isLo = row.ok && !tied && text === row.loText;
+      const isHi = row.ok && !tied && text === row.hiText;
+      if (isLo) td.classList.add("low");
+      if (isHi) td.classList.add("high");
+      const tag = isLo ? `<span class="tag low">low</span>` : isHi ? `<span class="tag high">high</span>` : "";
+      const quoteTag = v.quote ? `<span class="tag alt">${esc(v.quote)}</span>` : "";
+      const html = `<span class="px">${text}</span>${quoteTag}${tag}`;
+      if (td.dataset.v !== text){ td.dataset.v = text; flash(td); }
+      if (td.innerHTML !== html) td.innerHTML = html;
+      td.title = `${c} · bid ${fmtPx(v.bid)} · ask ${fmtPx(v.ask)}${v.quote ? " · quoted in " + v.quote : ""}`;
+    }
+
+    const sc = spreadCells.get(a.asset);
+    if (sc){
+      if (!row.ok){
+        sc.innerHTML = `<span class="none">insufficient data</span>`;
+        sc.title = `Fewer than two venues answered for ${a.asset}.`;
+      } else {
+        sc.innerHTML = `<span class="cellstack">
+          <span class="pct">${fmtPct(row.pct)}</span>
+          <span class="gap">${fmtMoney(row.gap)}</span>
+          ${row.arb > 0 ? `<span class="arb">arb ${fmtMoney(row.arb)}</span>` : ""}
+        </span>`;
+        sc.title = `${a.asset}: cheapest ${row.lo.exchange}, richest ${row.hi.exchange}`;
+        if (!widest || row.pct > widest.pct) widest = { asset:a.asset, ...row };
+      }
+    }
+  }
+
+  if (widest){
+    el("stripVal").textContent = `${widest.asset} ${fmtPct(widest.pct)}`;
+    el("stripDet").textContent =
+      `spread · cheapest ${widest.lo.exchange} · richest ${widest.hi.exchange} · ${fmtMoney(widest.gap)} gap`;
+  } else {
+    el("stripVal").innerHTML = "&mdash;";
+    el("stripDet").textContent = "not enough venues reporting";
+  }
+
+  firstPaint = false;
+}
+
+function setLive(isStale){
+  chip.classList.toggle("stale", isStale);
+  chipText.textContent = isStale ? "stale" : "live";
+  note.textContent = isStale ? "Could not reach the price feed. Showing the last good prices, retrying…" : "";
+}
+
+function tickAge(){
+  if (!lastAsOf){ el("age").textContent = "connecting…"; return; }
+  const s = Math.max(0, Math.round((Date.now() - lastAsOf.getTime()) / 1000));
+  el("age").textContent = s < 2 ? "updated just now" : `updated ${s}s ago`;
+  el("asof").textContent =
+    `As of ${pad2(lastAsOf.getHours())}:${pad2(lastAsOf.getMinutes())}:${pad2(lastAsOf.getSeconds())} local.`;
+  // The edge cache serves up to 10s stale, so only flag a genuinely dead feed.
+  if (s > REFRESH_MS / 1000 * 3) setLive(true);
+}
+
+async function load(){
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS);
+  try {
+    // no-store keeps the *browser* from serving its own stale copy (the response's
+    // s-maxage targets shared caches, so a private cache would otherwise heuristically
+    // reuse it). The URL stays constant, so Vercel's edge cache still absorbs the load
+    // and the exchanges see roughly one round of calls per 10s globally.
+    const res = await fetch(ENDPOINT, {
+      signal: ctl.signal, cache: "no-store", headers: { Accept: "application/json" }
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    if (!data || !Array.isArray(data.assets)) throw new Error("malformed payload");
+    lastGood = data;
+    lastAsOf = new Date(data.asOf || Date.now());
+    if (isNaN(lastAsOf.getTime())) lastAsOf = new Date();
+    paint(data);
+    setLive(false);
+  } catch (err) {
+    // Never blank the board: keep whatever was last rendered and say so.
+    setLive(true);
+    if (!lastGood) el("stripDet").textContent = "could not reach the price feed, retrying";
+  } finally {
+    clearTimeout(timer);
+    tickAge();
+  }
+}
+
+let poll = setInterval(load, REFRESH_MS);
+setInterval(tickAge, 1000);
+
+// Don't poll a hidden embed; refresh immediately when it comes back into view.
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden){ clearInterval(poll); poll = null; }
+  else if (!poll){ load(); poll = setInterval(load, REFRESH_MS); }
+});
+
+load();
+</script>
+</body>
+</html>

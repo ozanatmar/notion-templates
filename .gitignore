@@ -20,6 +20,9 @@ yarn-error.log*
 # Work-in-progress for other templates: kept on disk, not published.
 vendor-contract-renewal-manager/
 
+# Local dev server (serves the repo + routes /api/spread through the real handler)
+dev-server.js
+
 # Local-only files: kept on disk, deliberately not deployed.
 # iframe-test.html      -> local framing harness, see README
 # trade-analytics-widget.html -> original prototype, superseded by the widget's index.html
