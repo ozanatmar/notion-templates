@@ -47,14 +47,18 @@
   .card .cap{font-size:11.5px;color:var(--muted);margin:0 0 10px}
 
   .pairbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 11px}
-  .pairbar input{background:#0b1017;color:var(--ink);border:1px solid var(--line);border-radius:7px;
-    padding:7px 9px;font:12px var(--mono);width:150px}
+  /* Fills the row beside the button. A fixed width clipped the placeholder, which is
+     the only place the accepted format is shown. */
+  .pairbar input{flex:1 1 200px;min-width:0;background:#0b1017;color:var(--ink);
+    border:1px solid var(--line);border-radius:7px;padding:7px 9px;font:12px var(--mono)}
   .pairbar input::placeholder{color:var(--muted)}
   .pairbar input:disabled{opacity:.5}
   .btn{background:var(--accent);color:#04101f;border:none;border-radius:7px;padding:7px 14px;
     font:600 12.5px/1 inherit;cursor:pointer}
   .btn:disabled{opacity:.5;cursor:default}
-  .pairmsg{font:11px var(--mono);color:var(--muted)}
+  /* Own line under the field, so a long message never squeezes the input. */
+  .pairmsg{flex:1 0 100%;font:11px var(--mono);color:var(--muted);margin:-2px 0 0}
+  .pairmsg:empty{display:none}
   .pairmsg.err{color:var(--neg)}
   .pairmsg.ok{color:var(--pos)}
   .rm{background:none;border:1px solid var(--line);color:var(--muted);border-radius:4px;
@@ -112,6 +116,9 @@
     .card{padding:12px 11px}
     .strip{padding:10px 11px}
     th,td{padding:7px 8px}
+    /* Below this width the field and button cannot share a row without clipping the
+       placeholder, which is the only place the accepted format is shown. Stack them. */
+    .pairbar input,.pairbar .btn{flex:1 1 100%}
   }
   @media(prefers-reduced-motion:reduce){
     *{transition:none!important}
@@ -141,7 +148,7 @@
 
     <div class="pairbar">
       <label class="sr-only" for="pairInput">Add a pair by base symbol</label>
-      <input id="pairInput" type="text" placeholder="Add a pair, e.g. DOGE" maxlength="16"
+      <input id="pairInput" type="text" placeholder="Add a pair, e.g. DOGE or DOGE/USDT" maxlength="16"
              autocomplete="off" autocapitalize="characters" spellcheck="false">
       <button class="btn" id="addBtn" type="button">Add</button>
       <span class="pairmsg" id="pairMsg" role="status" aria-live="polite"></span>
