@@ -1,0 +1,27 @@
+# Vercel
+.vercel
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+
+# Node (none is required to build this site, but keep the repo clean if tooling is added)
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Browser-automation output
+.playwright-mcp/
+
+# Work-in-progress for other templates: kept on disk, not published.
+vendor-contract-renewal-manager/
+
+# Local-only files: kept on disk, deliberately not deployed.
+# iframe-test.html      -> local framing harness, see README
+# trade-analytics-widget.html -> original prototype, superseded by the widget's index.html
+iframe-test.html
+template-helpers/Crypto-FX-Trading-Dashboard-v2-trade-analytics/trade-analytics-widget.html

@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Client-side trade analytics: equity curve, R-multiples, P&amp;L by setup. Nothing you paste leaves the page.">
+<meta name="robots" content="index, follow">
+<title>Trade Analytics</title>
+<!-- Inline icon: keeps the browser from requesting /favicon.ico, so the page makes zero network calls. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230d1117'/%3E%3Cpath d='M2 12L6 8l3 2 5-6' stroke='%2358a6ff' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#0f141a; --line:#232a33; --grid:#20262e;
+    --ink:#e6edf3; --ink2:#9aa4b2; --muted:#6b7480;
+    --pos:#3fb950; --neg:#f85149; --accent:#58a6ff;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:780px;margin:0 auto;padding:20px 18px 30px}
+  .head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:2px}
+  h1{font-size:18px;margin:0;letter-spacing:.2px;font-weight:650}
+  .chip{font:600 10px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;
+    color:var(--accent);border:1px solid #1f3a5f;background:#0e1b2e;border-radius:5px;padding:4px 7px}
+  .sub{color:var(--muted);font-size:12.5px;margin:3px 0 16px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:9px;margin-bottom:14px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+  .kpi .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+  .kpi .v{font:600 20px/1.1 var(--mono);letter-spacing:.3px}
+  .kpi .s{font-size:11px;color:var(--ink2);margin-top:4px}
+  .pos{color:var(--pos)} .neg{color:var(--neg)} .acc{color:var(--accent)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 15px;margin-bottom:12px}
+  .card h2{font-size:12px;margin:0 0 2px;color:var(--ink2);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+  .card .cap{font-size:11.5px;color:var(--muted);margin:0 0 8px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:620px){.row2{grid-template-columns:1fr}}
+  .chartbox{position:relative;width:100%}
+  svg{display:block;width:100%;height:auto;overflow:visible}
+  .gl{stroke:var(--grid);stroke-width:1}
+  .axl{fill:var(--muted);font:11px var(--mono)}
+  .tip{position:absolute;pointer-events:none;background:#0b1017;border:1px solid var(--line);
+    border-radius:7px;padding:6px 9px;font:12px var(--mono);color:var(--ink);white-space:nowrap;
+    transform:translate(-50%,-115%);opacity:0;transition:opacity .08s;z-index:5;box-shadow:0 4px 14px rgba(0,0,0,.5)}
+  .crosshair{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3;opacity:0}
+  rect[data-i]{fill:transparent;outline:none}
+  rect[data-i]:focus-visible{fill:rgba(88,166,255,.09)}
+  table{width:100%;border-collapse:collapse;font:12px/1.5 var(--mono)}
+  th,td{text-align:right;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{color:var(--muted);font-weight:600;text-transform:uppercase;font-size:10.5px;letter-spacing:.04em}
+  td:first-child,th:first-child{text-align:left}
+  .tag{display:inline-block;font-size:10.5px;padding:1px 6px;border-radius:4px;border:1px solid var(--line);color:var(--ink2)}
+  details{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 13px;margin-bottom:12px}
+  summary{cursor:pointer;color:var(--ink2);font-size:12.5px;font-weight:600}
+  textarea{width:100%;height:120px;margin-top:9px;background:#0b1017;color:var(--ink);border:1px solid var(--line);
+    border-radius:8px;padding:9px;font:12px var(--mono);resize:vertical}
+  .btn{margin-top:8px;background:var(--accent);color:#04101f;border:none;border-radius:7px;padding:7px 14px;
+    font:600 12.5px/1 inherit;cursor:pointer}
+  .btn.ghost{background:transparent;color:var(--ink2);border:1px solid var(--line);margin-left:6px}
+  .btn:focus-visible,summary:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .hint{font-size:11px;color:var(--muted);margin-top:7px;font-family:var(--mono)}
+  .hint.err{color:var(--neg)}
+  .foot{color:var(--muted);font-size:11px;margin-top:14px;line-height:1.6}
+  .foot b{color:var(--ink2)}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+    clip:rect(0 0 0 0);white-space:nowrap;border:0}
+  @media(max-width:420px){
+    .wrap{padding:16px 12px 24px}
+    h1{font-size:16px}
+    .kpis{grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:7px}
+    .kpi{padding:9px 10px}
+    .kpi .v{font-size:17px}
+    .card{padding:12px 11px}
+    details{padding:10px 11px}
+  }
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body data-palette="#58a6ff,#3fb950,#f85149">
+<div class="wrap">
+  <div class="head">
+    <h1>Trade Analytics</h1>
+    <span class="chip">live preview &middot; sample data</span>
+  </div>
+  <p class="sub">Realized performance computed from your Trade Log. This is what a Notion formula cannot draw.</p>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="card">
+    <h2>Equity curve</h2>
+    <p class="cap">Cumulative realized P&amp;L, by close date.</p>
+    <div class="chartbox" id="equityBox"></div>
+  </div>
+
+  <div class="row2">
+    <div class="card">
+      <h2>R-multiple by trade</h2>
+      <p class="cap">Reward vs risk taken. Up is a win, down is a loss.</p>
+      <div class="chartbox" id="rBox"></div>
+    </div>
+    <div class="card">
+      <h2>P&amp;L by setup</h2>
+      <p class="cap">Which playbook actually makes money.</p>
+      <div class="chartbox" id="setupBox"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Closed trades</h2>
+    <div style="overflow-x:auto"><table id="tbl"></table></div>
+  </div>
+
+  <details>
+    <summary>Paste your own trades</summary>
+    <textarea id="ta" spellcheck="false" aria-label="Trade data, one trade per line"></textarea>
+    <div>
+      <button class="btn" id="run" type="button">Update</button>
+      <button class="btn ghost" id="reset" type="button">Reset to sample</button>
+    </div>
+    <p class="hint">Columns: Symbol, Side, Entry, Stop, Exit, Size, Fees, Closed, Setup. Tab or comma separated. Leave Exit blank for an open trade.</p>
+    <p class="hint" id="status" role="status" aria-live="polite"></p>
+  </details>
+
+  <p class="foot"><b>Client-side only.</b> Nothing you paste leaves this page, there is no server call. In the shipped template this reads your Trade Log export. Numbers are for review, not advice.</p>
+</div>
+
+<script>
+const SAMPLE = [
+  {symbol:"BTC/USDT", side:"Long",  entry:60000, stop:58500, exit:63000, size:0.5,    fees:25, closed:"2026-08-05", setup:"Breakout"},
+  {symbol:"ETH/USDT", side:"Short", entry:3400,  stop:3520,  exit:3480,  size:3,      fees:8,  closed:"2026-08-06", setup:"Reversal"},
+  {symbol:"SOL/USDT", side:"Long",  entry:140,   stop:132,   exit:158,   size:20,     fees:5,  closed:"2026-08-10", setup:"Trend"},
+  {symbol:"EUR/USD",  side:"Long",  entry:1.085, stop:1.078, exit:null,  size:100000, fees:0,  closed:null,         setup:"Range"}
+];
+
+const fmtMoney = v => (v<0?"-":"+") + "$" + Math.abs(v).toLocaleString("en-US",{maximumFractionDigits:0});
+const fmtMoneyPlain = v => "$" + Math.abs(v).toLocaleString("en-US",{maximumFractionDigits:0});
+const fmtR = v => (v>=0?"+":"") + v.toFixed(2) + "R";
+const sign = v => v>=0?"pos":"neg";
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function calc(t){
+  const dir = String(t.side||"").toLowerCase().startsWith("s") ? -1 : 1;
+  const move = dir*(t.exit - t.entry);
+  const pnl = move*t.size - (t.fees||0);
+  const risk = Math.abs(t.entry - t.stop);
+  const r = risk>0 ? move/risk : 0;
+  return {pnl, r};
+}
+
+// A trade counts as closed only when it has an exit and enough numeric data to price it.
+const isClosed = t => isFinite(t.exit) && t.exit!==null && isFinite(t.entry) && isFinite(t.size);
+
+function byCloseDate(a,b){
+  const da=Date.parse(a.closed||""), db=Date.parse(b.closed||"");
+  if(isNaN(da)&&isNaN(db)) return 0;
+  if(isNaN(da)) return 1;
+  if(isNaN(db)) return -1;
+  return da-db;
+}
+
+function compute(trades){
+  const closed = trades.filter(isClosed).map(t => ({...t, ...calc(t)})).sort(byCloseDate);
+  const n = closed.length;
+  const wins = closed.filter(t=>t.pnl>0);
+  const losses = closed.filter(t=>t.pnl<0);
+  const net = closed.reduce((s,t)=>s+t.pnl,0);
+  const grossW = wins.reduce((s,t)=>s+t.pnl,0);
+  const grossL = Math.abs(losses.reduce((s,t)=>s+t.pnl,0));
+  const winRate = n? (wins.length/n*100):0;
+  const avgR = n? closed.reduce((s,t)=>s+t.r,0)/n : 0;
+  const pf = grossL>0 ? grossW/grossL : (grossW>0?Infinity:0);
+  const expc = n? net/n : 0;
+  // equity + drawdown
+  let eq=0, peak=0, maxDD=0, peakAtDD=0;
+  const pts=[{label:"Start", eq:0, date:null}];
+  closed.forEach(t=>{ eq+=t.pnl; if(eq>peak)peak=eq; const dd=peak-eq; if(dd>maxDD){maxDD=dd;peakAtDD=peak;} pts.push({label:t.symbol, eq, date:t.closed}); });
+  const maxDDpct = peakAtDD>0 ? maxDD/peakAtDD*100 : 0;
+  // by setup
+  const bySetup={};
+  closed.forEach(t=>{ bySetup[t.setup||"—"]=(bySetup[t.setup||"—"]||0)+t.pnl; });
+  return {closed,n,wins:wins.length,losses:losses.length,net,winRate,avgR,pf,expc,pts,maxDD,maxDDpct,bySetup,open:trades.length-n};
+}
+
+function renderKPIs(m){
+  const pf = m.pf===Infinity?"∞":m.pf.toFixed(2);
+  const tiles=[
+    {l:"Net P&L", v:fmtMoney(m.net), c:sign(m.net), s:m.n+" closed &middot; "+m.open+" open"},
+    {l:"Win rate", v:m.winRate.toFixed(0)+"%", c:"", s:m.wins+"W / "+m.losses+"L"},
+    {l:"Avg R", v:fmtR(m.avgR), c:sign(m.avgR), s:"per closed trade"},
+    {l:"Profit factor", v:pf, c:m.pf>=1?"pos":"neg", s:"gross win / gross loss"},
+    {l:"Max drawdown", v:(m.maxDD>0?"-":"")+fmtMoneyPlain(m.maxDD), c:m.maxDD>0?"neg":"", s:m.maxDDpct.toFixed(1)+"% from peak"},
+    {l:"Expectancy", v:fmtMoney(m.expc), c:sign(m.expc), s:"avg $ per trade"}
+  ];
+  document.getElementById("kpis").innerHTML = tiles.map(t=>
+    `<div class="kpi"><div class="l">${t.l}</div><div class="v ${t.c}">${t.v}</div><div class="s">${t.s}</div></div>`).join("");
+}
+
+function niceTicks(min,max,count){
+  const span=max-min||1, step0=span/count, mag=Math.pow(10,Math.floor(Math.log10(step0)));
+  const norm=step0/mag, step=(norm<1.5?1:norm<3?2:norm<7?5:10)*mag;
+  const lo=Math.floor(min/step)*step, hi=Math.ceil(max/step)*step, out=[];
+  for(let v=lo; v<=hi+1e-9; v+=step) out.push(v);
+  return out;
+}
+
+function renderEquity(m){
+  const box=document.getElementById("equityBox");
+  const W=700,H=260, pl=52,pr=16,pt=16,pb=26;
+  const iw=W-pl-pr, ih=H-pt-pb;
+  const pts=m.pts;
+  const ys=pts.map(p=>p.eq);
+  let ymin=Math.min(0,...ys), ymax=Math.max(0,...ys);
+  const pad=(ymax-ymin)*0.12||1; ymin-=pad; ymax+=pad;
+  const ticks=niceTicks(ymin,ymax,4);
+  ymin=Math.min(ymin,ticks[0]); ymax=Math.max(ymax,ticks[ticks.length-1]);
+  const X=i=> pl + (pts.length<=1?0:i/(pts.length-1)*iw);
+  const Y=v=> pt + (ymax-v)/(ymax-ymin)*ih;
+  const line=pts.map((p,i)=>`${i?"L":"M"}${X(i).toFixed(1)},${Y(p.eq).toFixed(1)}`).join(" ");
+  const area=`${line} L${X(pts.length-1).toFixed(1)},${Y(ymin).toFixed(1)} L${X(0).toFixed(1)},${Y(ymin).toFixed(1)} Z`;
+  const grid=ticks.map(t=>`<line class="gl" x1="${pl}" y1="${Y(t).toFixed(1)}" x2="${W-pr}" y2="${Y(t).toFixed(1)}"/>`+
+    `<text class="axl" x="${pl-8}" y="${(Y(t)+3).toFixed(1)}" text-anchor="end">${t>=0?"":"-"}$${Math.abs(t).toLocaleString("en-US",{maximumFractionDigits:0})}</text>`).join("");
+  const zeroY=Y(0);
+  const dots=pts.map((p,i)=>`<circle cx="${X(i).toFixed(1)}" cy="${Y(p.eq).toFixed(1)}" r="3.2" fill="#0d1117" stroke="var(--accent)" stroke-width="2"/>`).join("");
+  const last=pts[pts.length-1];
+  const lastLabel=`<text x="${(X(pts.length-1)-6).toFixed(1)}" y="${(Y(last.eq)-9).toFixed(1)}" text-anchor="end" fill="var(--accent)" font-family="var(--mono)" font-size="12" font-weight="700">${fmtMoney(last.eq)}</text>`;
+  const xl=pts.map((p,i)=> i===0?"":`<text class="axl" x="${X(i).toFixed(1)}" y="${H-8}" text-anchor="middle">${esc((p.date||"").slice(5))}</text>`).join("");
+  // Hit areas tile the full plot width so every horizontal position resolves to its nearest point.
+  const hit=pts.map((p,i)=>{
+    const lo = i===0 ? pl : (X(i-1)+X(i))/2;
+    const hi = i===pts.length-1 ? W-pr : (X(i)+X(i+1))/2;
+    const label = `${p.date?p.date:"Start"}, ${fmtMoney(p.eq)}`;
+    return `<rect x="${lo.toFixed(1)}" y="${pt}" width="${Math.max(hi-lo,1).toFixed(1)}" height="${ih}" data-i="${i}" tabindex="0" role="img" aria-label="${esc(label)}"/>`;
+  }).join("");
+  const summary=`Equity curve. Cumulative realized profit and loss ends at ${fmtMoney(last.eq)} across ${m.n} closed trades.`;
+  box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(summary)}">
+    <defs><linearGradient id="eg" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#58a6ff" stop-opacity="0.28"/><stop offset="1" stop-color="#58a6ff" stop-opacity="0"/>
+    </linearGradient></defs>
+    ${grid}
+    <line class="gl" x1="${pl}" y1="${zeroY.toFixed(1)}" x2="${W-pr}" y2="${zeroY.toFixed(1)}" stroke="#2f3742"/>
+    <path d="${area}" fill="url(#eg)"/>
+    <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${dots}${lastLabel}${xl}
+    <line class="crosshair" id="chx" x1="0" y1="${pt}" x2="0" y2="${pt+ih}"/>
+    ${hit}
+  </svg><div class="tip" id="etip"></div>`;
+  const svg=box.querySelector("svg"), tip=box.querySelector("#etip"), ch=box.querySelector("#chx");
+  const show=i=>{
+    const p=pts[i], px=X(i), py=Y(p.eq);
+    ch.setAttribute("x1",px); ch.setAttribute("x2",px); ch.style.opacity=1;
+    const bx=box.getBoundingClientRect();
+    tip.style.left=(px/W*bx.width)+"px"; tip.style.top=(py/H*bx.height)+"px";
+    tip.innerHTML=`${p.date?esc(p.date):"Start"} &middot; <b>${fmtMoney(p.eq)}</b>`; tip.style.opacity=1;
+  };
+  const hide=()=>{ ch.style.opacity=0; tip.style.opacity=0; };
+  svg.querySelectorAll("rect[data-i]").forEach(r=>{
+    const i=+r.dataset.i;
+    r.addEventListener("pointerenter",()=>show(i));
+    r.addEventListener("pointerdown",()=>show(i));
+    r.addEventListener("pointerleave",hide);
+    r.addEventListener("focus",()=>show(i));
+    r.addEventListener("blur",hide);
+  });
+}
+
+function renderRbars(m){
+  const box=document.getElementById("rBox");
+  const d=m.closed; const W=340,H=200,pl=10,pr=10,pt=22,pb=26,iw=W-pl-pr,ih=H-pt-pb;
+  if(!d.length){box.innerHTML="<p class='cap'>No closed trades.</p>";return;}
+  const rmax=Math.max(1,...d.map(t=>Math.abs(t.r)))*1.15;
+  const Y=v=> pt + (rmax-v)/(2*rmax)*ih;
+  const zeroY=Y(0);
+  const bw=Math.min(48, iw/d.length*0.6), gap=iw/d.length;
+  const bars=d.map((t,i)=>{
+    const cx=pl+gap*(i+0.5), y=t.r>=0?Y(t.r):zeroY, h=Math.abs(Y(t.r)-zeroY);
+    const col=t.r>=0?"var(--pos)":"var(--neg)";
+    const ly=t.r>=0? y-6 : y+h+13;
+    return `<rect x="${(cx-bw/2).toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(h,1).toFixed(1)}" rx="3" fill="${col}"/>`+
+      `<text x="${cx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" font-family="var(--mono)" font-size="11" font-weight="700" fill="${col}">${fmtR(t.r)}</text>`+
+      `<text x="${cx.toFixed(1)}" y="${H-8}" text-anchor="middle" class="axl" font-size="10">${esc(String(t.symbol).split("/")[0])}</text>`;
+  }).join("");
+  const summary="R-multiple by trade: "+d.map(t=>`${t.symbol} ${fmtR(t.r)}`).join(", ")+".";
+  box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(summary)}">
+    <line class="gl" x1="${pl}" y1="${zeroY.toFixed(1)}" x2="${W-pr}" y2="${zeroY.toFixed(1)}" stroke="#2f3742"/>
+    ${bars}</svg>`;
+}
+
+function renderSetup(m){
+  const box=document.getElementById("setupBox");
+  const rows=Object.entries(m.bySetup).sort((a,b)=>b[1]-a[1]);
+  if(!rows.length){box.innerHTML="<p class='cap'>No closed trades.</p>";return;}
+  const maxAbs=Math.max(...rows.map(r=>Math.abs(r[1])))||1;
+  const W=340,rowH=34,pl=74,pr=52,mid=(W-pl-pr);
+  const H=rows.length*rowH+8;
+  const bars=rows.map((r,i)=>{
+    const [name,val]=r; const y=8+i*rowH; const w=Math.abs(val)/maxAbs*mid;
+    const col=val>=0?"var(--pos)":"var(--neg)";
+    return `<text x="8" y="${(y+16).toFixed(1)}" class="axl" font-size="11" fill="var(--ink2)">${esc(name)}</text>`+
+      `<rect x="${pl}" y="${y+5}" width="${Math.max(w,2).toFixed(1)}" height="16" rx="3" fill="${col}"/>`+
+      `<text x="${(pl+Math.max(w,2)+6).toFixed(1)}" y="${(y+17).toFixed(1)}" font-family="var(--mono)" font-size="11" font-weight="700" fill="${col}">${fmtMoney(val)}</text>`;
+  }).join("");
+  const summary="Profit and loss by setup: "+rows.map(r=>`${r[0]} ${fmtMoney(r[1])}`).join(", ")+".";
+  box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(summary)}">${bars}</svg>`;
+}
+
+function renderTable(m){
+  const cap=`<caption class="sr-only">Closed trades with R-multiple and profit or loss per trade, and a totals row.</caption>`;
+  const head=`<tr><th scope="col">Trade</th><th scope="col">Setup</th><th scope="col">Side</th><th scope="col">R</th><th scope="col">P&L</th></tr>`;
+  const rows=m.closed.map(t=>`<tr><td>${esc(t.symbol)}</td><td><span class="tag">${esc(t.setup||"—")}</span></td>`+
+    `<td>${esc(t.side)}</td><td class="${sign(t.r)}">${fmtR(t.r)}</td><td class="${sign(t.pnl)}">${fmtMoney(t.pnl)}</td></tr>`).join("");
+  const foot=`<tr><td><b>Total</b></td><td></td><td></td><td class="${sign(m.avgR)}">${fmtR(m.avgR)}</td><td class="${sign(m.net)}">${fmtMoney(m.net)}</td></tr>`;
+  document.getElementById("tbl").innerHTML=cap+head+rows+foot;
+}
+
+function draw(trades){
+  const m=compute(trades);
+  renderKPIs(m); renderEquity(m); renderRbars(m); renderSetup(m); renderTable(m);
+  return m;
+}
+
+// Splits one row, honouring "quoted fields" so a value like "$60,000" survives a comma delimiter.
+function splitRow(line, delim){
+  const out=[]; let cur="", inQuotes=false;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(inQuotes){
+      if(ch==='"'){ if(line[i+1]==='"'){ cur+='"'; i++; } else inQuotes=false; }
+      else cur+=ch;
+    }
+    else if(ch==='"') inQuotes=true;
+    else if(ch===delim){ out.push(cur.trim()); cur=""; }
+    else cur+=ch;
+  }
+  out.push(cur.trim());
+  return out;
+}
+
+function parse(text){
+  const lines=text.trim().split(/\r?\n/).filter(l=>l.trim());
+  if(!lines.length) return [];
+  const delim = lines[0].includes("\t")?"\t":",";
+  const cells=l=>splitRow(l,delim);
+  let header=cells(lines[0]).map(h=>h.toLowerCase());
+  const known=["symbol","side","entry","stop","exit","size","fees","closed","setup"];
+  let start=0, idx={};
+  if(header.some(h=>known.includes(h))){ known.forEach(k=>idx[k]=header.indexOf(k)); start=1; }
+  else { known.forEach((k,i)=>idx[k]=i); }
+  const num=v=>{ const n=parseFloat(String(v).replace(/[$,]/g,"")); return isFinite(n)?n:null; };
+  const out=[];
+  for(let i=start;i<lines.length;i++){
+    const c=cells(lines[i]);
+    const g=k=> idx[k]>=0? c[idx[k]] : undefined;
+    const entry=num(g("entry")), exitRaw=g("exit");
+    out.push({ symbol:g("symbol")||"?", side:g("side")||"Long", entry, stop:num(g("stop")),
+      exit: (exitRaw===undefined||exitRaw==="")?null:num(exitRaw), size:num(g("size"))||0,
+      fees:num(g("fees"))||0, closed:g("closed")||null, setup:g("setup")||"—" });
+  }
+  return out;
+}
+
+function sampleText(){
+  return "Symbol,Side,Entry,Stop,Exit,Size,Fees,Closed,Setup\n"+
+    SAMPLE.map(t=>[t.symbol,t.side,t.entry,t.stop,t.exit??"",t.size,t.fees,t.closed??"",t.setup].join(",")).join("\n");
+}
+
+const ta=document.getElementById("ta");
+const statusEl=document.getElementById("status");
+const setStatus=(msg,isErr)=>{ statusEl.textContent=msg; statusEl.classList.toggle("err",!!isErr); };
+
+ta.value=sampleText();
+
+document.getElementById("run").addEventListener("click",()=>{
+  const t=parse(ta.value);
+  if(!t.length){ setStatus("Nothing to read. Paste at least one trade row.",true); return; }
+  const m=draw(t);
+  if(!m.n){ setStatus(`Read ${t.length} row${t.length===1?"":"s"}, none with a usable Exit. Realized stats need an Exit, Entry and Size.`,true); return; }
+  setStatus(`Read ${t.length} row${t.length===1?"":"s"} · ${m.n} closed · ${m.open} open.`,false);
+});
+
+document.getElementById("reset").addEventListener("click",()=>{
+  ta.value=sampleText();
+  draw(SAMPLE);
+  setStatus("Reset to sample data.",false);
+});
+
+draw(SAMPLE);
+</script>
+</body>
+</html>
