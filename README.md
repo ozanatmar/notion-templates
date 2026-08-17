@@ -147,6 +147,29 @@ A venue that fails, times out or returns junk lands in `errors` and is dropped f
 fails the response. The browser calls only this same-origin endpoint, never an exchange directly, which
 sidesteps CORS and keeps caching in one place.
 
+### The function must run in the EU — do not remove the region pin
+
+`vercel.json` contains:
+
+```json
+"regions": ["fra1"]
+```
+
+**Binance and Bybit geo-block US and datacenter IPs.** From Vercel's default US region (`iad1`) they answer
+`451 Unavailable For Legal Reasons` and `403` respectively, and the board silently drops to three venues.
+Pinning the function to Frankfurt puts it where all five exchanges answer.
+
+If you ever delete that line, or a plan change forces the function back to a US region, expect Binance and
+Bybit to disappear from every row. The fallback is to swap the two hosts that geo-block:
+
+| Venue | Default host | US-reachable alternative |
+| --- | --- | --- |
+| Binance | `api.binance.com` | `data-api.binance.vision` (same `/api/v3/...` paths, public market-data host) |
+| Bybit | `api.bybit.com` | `api.bytick.com` (Bybit's mirror, same paths) |
+
+Region pinning is the real fix; the mirrors are a workaround. Bybit in particular can still refuse a US
+datacenter IP even on the mirror domain, so treat that path as region-dependent rather than guaranteed.
+
 ### Why this stays free no matter how many people use it
 
 The function sets:
