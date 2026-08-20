@@ -152,6 +152,12 @@ Two things to know:
 - **TradingView is an external dependency.** These three widgets need TradingView's CDN and servers, unlike
   the other two. If TradingView is unreachable, each page still renders its shell and credit line and shows
   a short "unavailable right now" note instead of a blank frame or a thrown error.
+- **The ticker tape is a ~65px strip, and its `displayMode` is load-bearing.** `"regular"` is the
+  single-line row that sizes itself to 44px. `"compact"` is *not* compact: it stacks symbol, price and
+  change and reserves 72px, which turns the widget into a tall block. The page has no panel, no heading and
+  `overflow:hidden` so it can never scroll; the credit and TradingView attribution share one 11px line
+  beneath the tape. Below ~560px that line wraps to two and the strip becomes ~76px, because the credit text
+  cannot fit on one line at that width.
 - **The calendar's column headers are ours, not TradingView's.** The events widget ships no header row,
   and it renders in a cross-origin iframe we cannot style, so the header sits in our shell and is aligned to
   the widget's own grid: left columns at fixed pixel offsets (time 19, country 96, importance 152, event

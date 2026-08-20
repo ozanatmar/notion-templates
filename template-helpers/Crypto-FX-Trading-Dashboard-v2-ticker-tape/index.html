@@ -4,69 +4,66 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
-<meta name="description" content="Live TradingView ticker tape strip, dark themed, sized for a narrow Notion embed.">
+<meta name="description" content="Live TradingView ticker tape strip, dark themed, sized for a slim Notion embed.">
 <title>Ticker Tape</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230d1117'/%3E%3Cpath d='M2 5h12M2 11h12' stroke='%2358a6ff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
   :root{
-    --bg:#0d1117; --panel:#161b22; --line:#232a33;
-    --ink:#e6edf3; --ink2:#9aa4b2; --muted:#6b7480; --accent:#58a6ff;
+    --bg:#0d1117; --line:#232a33;
+    --ink:#e6edf3; --muted:#6b7480; --accent:#58a6ff;
     --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
   }
   *{box-sizing:border-box}
   html{-webkit-text-size-adjust:100%}
-  body{margin:0;background:var(--bg);color:var(--ink);
+  /* Slim strip: never scrolls, never shows a scrollbar. There is no panel, no page
+     padding and no heading -- any of those would make it taller than the tape. */
+  html,body{margin:0;padding:0;overflow:hidden}
+  body{background:var(--bg);color:var(--ink);
     font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     -webkit-font-smoothing:antialiased}
-  /* Deliberately no page title here: this widget is a thin strip, and a heading would
-     be taller than the tape itself. Height stays natural so the embed can be short. */
-  .wrap{width:100%;max-width:1360px;margin:0 auto;padding:10px clamp(8px,2vw,20px) 12px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;
-    padding:4px 6px 2px;overflow:hidden}
-  .tvbox iframe{display:block;width:100%!important;border:0}
-  /* TradingView injects its own !important styles for this once loaded; these only
-     cover the moment before that, and the case where the script never arrives. */
-  .tradingview-widget-copyright{font-size:11px;line-height:1.6;text-align:center;
-    padding:2px 0 0;color:var(--muted)}
-  .tradingview-widget-copyright a{color:var(--muted);text-decoration:none}
-  .tradingview-widget-copyright .blue-text{color:var(--accent)}
-  .tvfail{margin:0;padding:12px 6px;text-align:center;color:var(--ink2);font-size:12px;line-height:1.6}
-  .tvfail b{color:var(--ink)}
-  .tvfail span{color:var(--muted);font-size:11.5px}
-  .credit{text-align:center;color:var(--muted);font-size:11px;line-height:1.6;margin:9px 0 0}
-  .credit a{color:var(--accent);text-decoration:none;border-radius:3px}
-  .credit a:hover{text-decoration:underline}
-  .credit a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  @media(max-width:420px){ .wrap{padding:8px 8px 10px} }
+
+  /* displayMode "regular" is the single-line row and sizes itself to 44px; "compact"
+     is the stacked symbol/price/change layout and reserves 72px, which is what made
+     this widget a tall block. Let the widget own its height and just clip anything
+     that overflows, so there is never an inner scroll area. */
+  #tvbox{width:100%;overflow:hidden}
+  #tvbox iframe{display:block;border:0;width:100%!important}
+
+  /* Static thin footer, outside the TradingView container so it can never scroll.
+     Carries our credit and TradingView's required attribution on one line. */
+  /* Plain inline flow, not flex: flex items cannot break across each other, so the
+     TradingView link was pushed onto a line of its own on a narrow embed. */
+  .foot{display:block;padding:2px 8px 3px;text-align:center;
+    font:11px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--muted);text-wrap:balance}
+  .foot a{color:var(--accent);text-decoration:none}
+  .foot a:hover{text-decoration:underline}
+  .foot a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+  .sep{color:var(--line)}
+
+  .tvfail{margin:0;padding:10px 8px;text-align:center;color:var(--muted);font:11.5px/1.5 var(--mono)}
+  @media(max-width:560px){ .foot{padding:2px 5px 3px;font-size:10px;line-height:1.25} }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="card">
-    <!-- TradingView replaces the script below with its widget, and adopts the
-         copyright block. The block is required by their terms: do not remove it. -->
-    <div class="tradingview-widget-container tvbox" id="tvbox">
-      <div class="tradingview-widget-container__widget"></div>
-      <div class="tradingview-widget-copyright">
-        <a href="https://www.tradingview.com/" rel="noopener nofollow" target="_blank">
-          <span class="blue-text">Track all markets on TradingView</span>
-        </a>
-      </div>
-    </div>
-    <p class="tvfail" id="tvfail" hidden>
-      <b>Ticker unavailable right now.</b><br>
-      <span>TradingView could not be reached. Reload once your connection is back.</span>
-    </p>
-  </div>
-
-  <p class="credit">This tool is developed by Ozan Atmar for the <a href="https://www.notion.com/templates/crypto-fx-trading-dashboard" target="_blank" rel="noopener">Crypto/FX Trading Dashboard v2</a> template.</p>
+<!-- TradingView replaces the inner div with its widget. Their own logo badge rides
+     inside the tape; the text attribution below is required by their embed terms. -->
+<div class="tradingview-widget-container" id="tvbox">
+  <div class="tradingview-widget-container__widget"></div>
 </div>
+
+<footer class="foot">
+  <span>This tool is developed by Ozan Atmar for the <a href="https://www.notion.com/templates/crypto-fx-trading-dashboard" target="_blank" rel="noopener">Crypto/FX Trading Dashboard v2</a> template.</span>
+  <span class="sep" aria-hidden="true">&middot;</span>
+  <a href="https://www.tradingview.com/" rel="noopener nofollow" target="_blank">Track all markets on TradingView</a>
+</footer>
+
+<p class="tvfail" id="tvfail" hidden>Ticker unavailable &mdash; TradingView could not be reached.</p>
 
 <script>
 (function(){
   "use strict";
-  // CAPITALCOM:DXY, not TVC:DXY: the latter returns a no-data error in the free embed,
-  // as do ICEUS:DX1! and INDEX:DXY. Verified against the live widget.
+  // CAPITALCOM:DXY, not TVC:DXY: the latter returns a no-data error in the free embed.
   var DEFAULTS = ["BINANCE:BTCUSDT","BINANCE:ETHUSDT","BINANCE:SOLUSDT","FX:EURUSD","CAPITALCOM:DXY"];
   var MAX = 12;
   // Strict allowlist; values are serialised into the widget config. "!" is included
@@ -114,11 +111,11 @@
     s.textContent = JSON.stringify({
       symbols: symbols.map(function(sym){ return { proName: sym, title: shortTitle(sym) }; }),
       showSymbolLogo: true,
-      // Must stay false: with isTransparent:true the tape's symbol cards render white
-      // even under colorTheme:"dark". Letting TradingView paint its own dark
-      // background is what actually matches the shell.
+      // Must stay false. With isTransparent:true this tape renders on a white
+      // surface even under colorTheme:"dark", which is the opposite of the dark
+      // strip we want; letting TradingView paint its own dark background matches.
       isTransparent: false,
-      displayMode: "compact",
+      displayMode: "regular",
       colorTheme: "dark",
       locale: "en"
     });
