@@ -152,6 +152,12 @@ Two things to know:
 - **TradingView is an external dependency.** These three widgets need TradingView's CDN and servers, unlike
   the other two. If TradingView is unreachable, each page still renders its shell and credit line and shows
   a short "unavailable right now" note instead of a blank frame or a thrown error.
+- **The calendar's column headers are ours, not TradingView's.** The events widget ships no header row,
+  and it renders in a cross-origin iframe we cannot style, so the header sits in our shell and is aligned to
+  the widget's own grid: left columns at fixed pixel offsets (time 19, country 96, importance 152, event
+  199) and value columns right-aligned at 67% / 83% / 99%. Those numbers were measured off the live embed.
+  If TradingView changes its internal layout the header will drift and need re-measuring; below 640px it is
+  replaced by a plain legend that makes no alignment claim.
 - **Their attribution must stay.** Each page ships the `tradingview-widget-copyright` block ("Track all
   markets on TradingView"). TradingView's embed terms require it, and their script styles that block itself
   once loaded. Do not remove it.
