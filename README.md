@@ -16,7 +16,7 @@ All widgets belong to the Crypto / FX Trading Dashboard v2 template; folders are
 | Trade Analytics | `-trade-analytics` | Fully client-side | — |
 | Cross-Exchange Spread | `-cross-exchange-spread` | Live, via `/api/spread` | `?assets=` |
 | Live Chart | `-live-chart` | TradingView | `?symbol=`, `?interval=` |
-| Ticker Tape | `-ticker-tape` | TradingView | `?symbols=` |
+| Live Ticker | `-ticker-tape` | Live, via `/api/ticker` | — |
 | Economic Calendar | `-economic-calendar` | TradingView | `?currencies=` |
 
 The root `index.html` is a directory page linking to each widget.
@@ -27,7 +27,8 @@ The root `index.html` is a directory page linking to each widget.
 notion-templates/
   index.html                             lists and links the widgets
   api/
-    spread.js                            price aggregator (Vercel Node function)
+    spread.js                            cross-exchange price aggregator (Vercel Node function)
+    ticker.js                            24h ticker for the scrolling strip (Vercel Node function)
   template-helpers/
     Crypto-FX-Trading-Dashboard-v2-trade-analytics/
       index.html                         the trade-analytics widget (self-contained)
@@ -132,7 +133,7 @@ to keep answering. Add `/api/spread-v2.js` for an incompatible response shape ra
 
 ## The TradingView-backed widgets
 
-Live Chart, Ticker Tape and Economic Calendar are thin pages: our dark shell plus one official TradingView
+Live Chart and Economic Calendar are thin pages: our dark shell plus one official TradingView
 embed widget, loaded client-side from `s3.tradingview.com`. **No API key, no account, no cost** — these are
 TradingView's free public embeds. There is no serverless function behind them.
 
@@ -140,7 +141,6 @@ Each reads its config from its own URL, so the buyer customises by editing the e
 
 ```
 .../Crypto-FX-Trading-Dashboard-v2-live-chart/?symbol=BINANCE:ETHUSDT&interval=240
-.../Crypto-FX-Trading-Dashboard-v2-ticker-tape/?symbols=BINANCE:BTCUSDT,FX:EURUSD
 .../Crypto-FX-Trading-Dashboard-v2-economic-calendar/?currencies=USD,EUR
 ```
 
@@ -152,12 +152,6 @@ Two things to know:
 - **TradingView is an external dependency.** These three widgets need TradingView's CDN and servers, unlike
   the other two. If TradingView is unreachable, each page still renders its shell and credit line and shows
   a short "unavailable right now" note instead of a blank frame or a thrown error.
-- **The ticker tape is a ~65px strip, and its `displayMode` is load-bearing.** `"regular"` is the
-  single-line row that sizes itself to 44px. `"compact"` is *not* compact: it stacks symbol, price and
-  change and reserves 72px, which turns the widget into a tall block. The page has no panel, no heading and
-  `overflow:hidden` so it can never scroll; the credit and TradingView attribution share one 11px line
-  beneath the tape. Below ~560px that line wraps to two and the strip becomes ~76px, because the credit text
-  cannot fit on one line at that width.
 - **The calendar's column headers are ours, not TradingView's.** The events widget ships no header row,
   and it renders in a cross-origin iframe we cannot style, so the header sits in our shell and is aligned to
   the widget's own grid: left columns at fixed pixel offsets (time 19, country 96, importance 152, event
@@ -186,6 +180,27 @@ The pair list is also mirrored to `localStorage`, which is what makes a reader's
 reload. Note the limit: browsers can block storage in a third-party iframe, and the widget deliberately does
 not surface its own URL to the reader, so **a reader's changes are session-scoped and not guaranteed to
 persist.** Anything that must stick belongs in the `?assets=` of the embedded URL.
+
+## The ticker API: `/api/ticker`
+
+Backs the Live Ticker strip. One Vercel Node function, **no API key and no account**: it makes a single
+call to Binance's public 24h endpoint for all 30 pairs at once, not one call per symbol.
+
+```
+GET /api/ticker
+→ { "asOf": "...", "quote": "USDT",
+     "tickers": [ { "sym": "BTC", "price": 69812.45, "changePct": 8.519 } ] }
+```
+
+The symbol list is fixed in the function and the response is re-sorted to that order, because Binance
+returns its own. A symbol Binance omits is simply absent from `tickers` rather than a hole in the row, and
+an upstream failure still answers `200` with an empty list so the strip keeps its last good render.
+
+Caching is identical to `/api/spread`: `s-maxage=10, stale-while-revalidate=30`, constant URL, and the
+widget fetches with `cache: "no-store"`. Cost stays flat regardless of how many people are watching.
+
+**This function needs the `fra1` region pin too** — Binance answers `451` to US and datacenter IPs. The pin
+in `vercel.json` is project-wide, so it already covers this function; see the region section below.
 
 ## The price API: `/api/spread`
 
