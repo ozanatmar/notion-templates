@@ -141,6 +141,11 @@ to keep answering. Add `/api/spread-v2.js` for an incompatible response shape ra
 
 ## Rental Property Deal Analyzer
 
+**The widget follows the device theme, not Notion's.** It cannot read Notion's theme across the iframe,
+so it uses `prefers-color-scheme`, which matches the OS/browser setting. That usually agrees with Notion, but a
+viewer on OS-light with Notion in dark mode will see a light widget. Heatmap cell fills are identical in both
+themes so the colour scale keeps the same meaning; only the surrounding chrome changes.
+
 A single self-contained page: no backend, no network calls at runtime, nothing pulled from a CDN. Every
 number is computed in the browser and the last-used inputs are kept in `localStorage` under `rpda.v1`
 (wrapped in try/catch, so a sandboxed iframe with storage blocked still works).
