@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light">
+<meta name="description" content="Rental property deal analyzer: IRR, cash-on-cash, sensitivity heatmap and a 10-year pro forma. Runs entirely in your browser.">
+<meta name="robots" content="index, follow">
+<title>Rental Property Deal Analyzer</title>
+<!-- Inline icon: keeps the browser from requesting /favicon.ico, so the page makes zero network calls. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%234338ca'/%3E%3Cpath d='M3 8.5L8 4l5 4.5V13H3z' fill='none' stroke='%23fff' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --ink:#0f172a; --muted:#64748b; --faint:#94a3b8;
+    --hair:#e9ebf0; --hair2:#e0e3ea; --card:#f7f8fb;
+    --brand:#4338ca; --brand2:#6366f1; --brand-soft:#eef2ff;
+    --pos:#16a34a; --neg:#ef4444; --teal:#14b8a6;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:#fff;color:var(--ink);font:14px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+  .wrap{width:100%;max-width:1180px;margin:0 auto;padding:0 0 22px}
+
+  /* ---- header band ---- */
+  .band{background:linear-gradient(180deg,var(--brand-soft),#f6f7ff);
+    border-bottom:1px solid var(--hair2);padding:16px clamp(12px,3vw,26px) 15px}
+  .eyebrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:9px}
+  #dealName{font:600 13px/1.3 var(--sans);color:var(--ink);background:transparent;
+    border:1px solid transparent;border-radius:6px;padding:3px 6px;min-width:60px;max-width:220px}
+  #dealName:hover{border-color:var(--hair2);background:#fff}
+  #dealName:focus{outline:2px solid var(--brand2);outline-offset:1px;background:#fff}
+  .eyebrow .price{font:600 13px/1.3 var(--mono);color:var(--muted)}
+  .eyebrow .dot{color:var(--faint)}
+  .headline{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;justify-content:space-between}
+  .irrwrap{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;min-width:0}
+  .irr{font:800 40px/1 var(--mono);color:var(--brand);letter-spacing:-.5px}
+  .irrlabel{font-size:12.5px;color:var(--muted)}
+  /* margin-left:auto keeps the chip right-aligned on its own line once the header
+     wraps, not just when it shares a row with the IRR. */
+  .chip{margin-left:auto;font:700 11.5px/1 var(--sans);letter-spacing:.03em;border-radius:999px;
+    padding:7px 12px;border:1px solid;white-space:nowrap}
+  .chip.go{color:#166534;background:#dcfce7;border-color:#bbf7d0}
+  .chip.marginal{color:#92400e;background:#fef3c7;border-color:#fde68a}
+  .chip.pass{color:#991b1b;background:#fee2e2;border-color:#fecaca}
+
+  /* ---- layout ---- */
+  .body{display:grid;grid-template-columns:1fr;gap:14px;padding:14px clamp(12px,3vw,26px) 0}
+  @media(min-width:640px){ .body{grid-template-columns:minmax(0,286px) minmax(0,1fr);gap:16px} }
+  @media(min-width:1000px){ .body{grid-template-columns:minmax(0,310px) minmax(0,1fr)} }
+
+  /* ---- input panel ---- */
+  .panel{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:13px 13px 14px}
+  .grp{margin-bottom:13px}
+  .grp:last-of-type{margin-bottom:9px}
+  .grp h3{font:600 10.5px/1 var(--sans);text-transform:uppercase;letter-spacing:.07em;
+    color:var(--faint);margin:0 0 7px}
+  .fields{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .f{display:flex;flex-direction:column;gap:3px;min-width:0}
+  .f label{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .f input{width:100%;background:#fff;border:1px solid var(--hair2);border-radius:7px;
+    padding:6px 7px;font:12.5px/1.2 var(--mono);color:var(--ink);min-width:0}
+  .f input:focus{outline:2px solid var(--brand2);outline-offset:-1px;border-color:var(--brand2)}
+  .f input:invalid{border-color:var(--neg)}
+
+  .paste{border:1.5px dashed var(--brand2);background:var(--brand-soft);
+    border-radius:10px;padding:10px;margin-bottom:9px}
+  .paste h3{font:600 11.5px/1 var(--sans);color:var(--brand);margin:0 0 6px}
+  .paste textarea{width:100%;height:52px;resize:vertical;background:#fff;
+    border:1px solid #c7d2fe;border-radius:7px;padding:6px 7px;
+    font:11px/1.45 var(--mono);color:var(--ink)}
+  .paste textarea:focus{outline:2px solid var(--brand2);outline-offset:-1px}
+  .paste .hint{font:10.5px/1.5 var(--mono);color:var(--muted);margin:5px 0 0;word-break:break-word}
+  .pmsg{font:11px/1.45 var(--sans);margin:6px 0 0;min-height:1em}
+  .pmsg.err{color:var(--neg)}
+  .pmsg.ok{color:var(--pos)}
+  .pmsg:empty{display:none}
+
+  .btns{display:flex;gap:7px;flex-wrap:wrap}
+  .btn{background:var(--brand);color:#fff;border:none;border-radius:8px;padding:7px 13px;
+    font:600 12px/1 var(--sans);cursor:pointer}
+  .btn:hover{background:#3730a3}
+  .btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--hair2)}
+  .btn.ghost:hover{background:var(--card)}
+  .btn:focus-visible{outline:2px solid var(--brand2);outline-offset:2px}
+
+  /* ---- results ---- */
+  .results{display:flex;flex-direction:column;gap:14px;min-width:0}
+  .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  @media(min-width:900px){ .tiles{grid-template-columns:repeat(4,minmax(0,1fr))} }
+  .tile{border:1px solid var(--hair);border-radius:11px;padding:10px 12px;background:#fff}
+  .tile .l{font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+  .tile .v{font:700 20px/1.1 var(--mono);letter-spacing:-.2px}
+  .tile .s{font-size:10.5px;color:var(--muted);margin-top:4px}
+  .pos{color:var(--pos)} .neg{color:var(--neg)}
+
+  .subfigs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 12px;
+    border:1px solid var(--hair);border-radius:11px;padding:10px 12px;background:var(--card)}
+  @media(min-width:640px){ .subfigs{grid-template-columns:repeat(4,minmax(0,1fr))} }
+  .subfigs div{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .subfigs .l{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
+  .subfigs .v{font:600 13px/1.2 var(--mono);color:var(--ink)}
+
+  .card{border:1px solid var(--hair);border-radius:12px;padding:12px 13px;background:#fff;min-width:0}
+  .card h2{font:600 12px/1.3 var(--sans);margin:0 0 2px;color:var(--ink)}
+  .card .cap{font-size:11.5px;color:var(--muted);margin:0 0 10px}
+
+  /* ---- heatmap ---- */
+  .hmscroll{overflow-x:auto}
+  table.hm{border-collapse:separate;border-spacing:3px;width:100%;min-width:340px}
+  table.hm th{font:600 10px/1.2 var(--mono);color:var(--muted);font-weight:600;padding:2px 3px;white-space:nowrap}
+  table.hm th.rh{text-align:right;font-size:10px}
+  table.hm td{font:700 12.5px/1 var(--mono);color:var(--ink);text-align:center;
+    padding:9px 4px;border-radius:6px;white-space:nowrap}
+  .hmaxis{display:flex;justify-content:space-between;font:10.5px/1.4 var(--mono);
+    color:var(--faint);margin-top:7px}
+  .hmcorner{font:600 9.5px/1.2 var(--mono);color:var(--faint);text-align:right;padding-right:4px}
+
+  /* ---- pro forma ---- */
+  .tblscroll{overflow-x:auto}
+  table.pf{border-collapse:collapse;width:100%;font:12px/1.5 var(--mono);min-width:420px}
+  table.pf th,table.pf td{text-align:right;padding:6px 8px;border-bottom:1px solid var(--hair);white-space:nowrap}
+  table.pf th{color:var(--faint);font-weight:600;text-transform:uppercase;font-size:10px;letter-spacing:.04em}
+  table.pf td:first-child,table.pf th:first-child{text-align:left}
+  table.pf tbody tr:last-child td{border-bottom:none}
+  table.pf tbody tr:nth-child(even){background:#fcfcfe}
+
+  /* ---- callouts ---- */
+  .callouts{display:grid;grid-template-columns:1fr;gap:9px}
+  @media(min-width:760px){ .callouts{grid-template-columns:1fr 1fr} }
+  .callout{border:1px solid var(--hair);border-left:3px solid var(--brand2);
+    background:var(--brand-soft);border-radius:9px;padding:10px 12px;font-size:12.5px;line-height:1.55;color:var(--ink)}
+  .callout b{font-family:var(--mono);font-weight:700}
+  .callout.warn{border-left-color:#f59e0b;background:#fffbeb}
+
+  .foot{color:var(--faint);font-size:11px;text-align:center;margin:16px clamp(12px,3vw,26px) 0;line-height:1.6}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+    clip:rect(0 0 0 0);white-space:nowrap;border:0}
+  @media(max-width:420px){
+    .band{padding:13px 12px 12px}
+    .irr{font-size:33px}
+    .fields{gap:6px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="band">
+    <div class="eyebrow">
+      <label class="sr-only" for="dealName">Deal name</label>
+      <input id="dealName" type="text" maxlength="40" value="Oakline duplex" spellcheck="false">
+      <span class="dot">&middot;</span>
+      <span class="price" id="hdrPrice">$300,000</span>
+    </div>
+    <div class="headline">
+      <div class="irrwrap">
+        <span class="irr" id="irrBig">18.45%</span>
+        <span class="irrlabel" id="irrSub">levered IRR over 10 yrs</span>
+      </div>
+      <span class="chip go" id="verdict">GO &middot; beats your 12% target</span>
+    </div>
+  </div>
+
+  <div class="body">
+    <!-- ================= inputs ================= -->
+    <div class="panel">
+      <div id="groups"></div>
+
+      <div class="paste">
+        <h3>Paste a Deal export cell</h3>
+        <label class="sr-only" for="pasteBox">Deal export string</label>
+        <textarea id="pasteBox" spellcheck="false" placeholder="RPDA1|300000|25|6.5|30|3|6000|3300|0|5|3300|1200|0|0|5|5|8|3|3|3.5|6|10"></textarea>
+        <div class="btns" style="margin-top:7px">
+          <button class="btn" id="applyBtn" type="button">Apply</button>
+        </div>
+        <p class="pmsg" id="pasteMsg" role="status" aria-live="polite"></p>
+        <p class="hint">RPDA1 then 21 numbers, pipe separated.</p>
+      </div>
+
+      <div class="btns">
+        <button class="btn ghost" id="resetBtn" type="button">Reset to sample</button>
+      </div>
+    </div>
+
+    <!-- ================= results ================= -->
+    <div class="results">
+
+      <div class="tiles" id="tiles"></div>
+
+      <div class="subfigs" id="subfigs"></div>
+
+      <div class="card">
+        <h2>Sensitivity &mdash; IRR if rent and price move</h2>
+        <p class="cap">Each cell is the levered IRR for that combination. Green beats your target of <span id="tgtLabel">12%</span>.</p>
+        <div class="hmscroll">
+          <table class="hm" id="heat">
+            <caption class="sr-only">Levered IRR for each combination of monthly rent and purchase price. Rows are rent, columns are price.</caption>
+          </table>
+        </div>
+        <div class="hmaxis"><span>cheaper &larr; price</span><span>price &rarr; pricier</span></div>
+      </div>
+
+      <div class="card">
+        <h2>Pro forma</h2>
+        <p class="cap" id="pfCap">Year by year over the hold.</p>
+        <div class="tblscroll">
+          <table class="pf" id="pf">
+            <caption class="sr-only">Annual rent, net operating income, cash flow, cash-on-cash return and equity for each year of the hold.</caption>
+          </table>
+        </div>
+      </div>
+
+      <div class="callouts">
+        <div class="callout" id="beCallout"></div>
+        <div class="callout" id="clearCallout"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <p class="foot">100% client-side. Your numbers never leave the browser.</p>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var STORE_KEY = "rpda.v1";
+
+  /* ---------- field definitions -------------------------------------------
+     EXPORT_ORDER is the wire format and must never be reordered: the Notion
+     template writes positionally, so a change here silently misreads deals. */
+  var EXPORT_ORDER = ["price","down","rate","term","closing","rehab","rent","other","vac",
+    "tax","ins","hoa","util","maint","capex","mgmt","rg","eg","app","sell","hold"];
+
+  var GROUPS = [
+    { title:"Purchase",        keys:[["price","Price"],["closing","Closing %"],["rehab","Rehab"]] },
+    { title:"Financing",       keys:[["down","Down %"],["rate","Rate %"],["term","Term (yrs)"]] },
+    { title:"Income",          keys:[["rent","Rent /mo"],["other","Other income /mo"],["vac","Vacancy %"]] },
+    { title:"Operating costs", keys:[["tax","Tax /yr"],["ins","Insurance /yr"],["hoa","HOA /mo"],
+                                     ["util","Utilities /mo"],["maint","Maintenance %"],["capex","CapEx %"],
+                                     ["mgmt","Management %"]] },
+    { title:"Growth & exit",   keys:[["rg","Rent growth %"],["eg","Expense growth %"],["app","Appreciation %"],
+                                     ["sell","Sell costs %"],["hold","Hold yrs"]] },
+    { title:"Targets",         keys:[["tIRR","Target IRR %"],["tCoC","Target CoC %"]] }
+  ];
+
+  var SAMPLE_STR = "RPDA1|300000|25|6.5|30|3|6000|3300|0|5|3300|1200|0|0|5|5|8|3|3|3.5|6|10";
+  var SAMPLE_NAME = "Oakline duplex";
+  var SAMPLE = {
+    price:300000, down:25, rate:6.5, term:30, closing:3, rehab:6000,
+    rent:3300, other:0, vac:5, tax:3300, ins:1200, hoa:0, util:0,
+    maint:5, capex:5, mgmt:8, rg:3, eg:3, app:3.5, sell:6, hold:10,
+    tIRR:12, tCoC:8
+  };
+
+  var state = Object.assign({}, SAMPLE);
+  var dealName = SAMPLE_NAME;
+
+  /* ---------- formatting -------------------------------------------------- */
+  var num0 = function(v){ return Math.round(v).toLocaleString("en-US"); };
+  function money(v){ return "$" + num0(Math.abs(v)); }
+  function moneySigned(v){ return (v < 0 ? "-" : "+") + "$" + num0(Math.abs(v)); }
+  function pct(v, dp){ return v.toFixed(dp === undefined ? 2 : dp) + "%"; }
+  function pctSigned(v){ return (v >= 0 ? "+" : "") + v.toFixed(2) + "%"; }
+  function esc(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c];
+    });
+  }
+
+  /* ---------- the model ---------------------------------------------------
+     Ported verbatim from the spec. Every branch is guarded so an all-cash deal
+     (Down 100, Rate 0) yields P&I 0 and DSCR 999 rather than dividing by zero. */
+  function compute(p){
+    var r = p.rate/1200, n = p.term*12;
+    var loan = p.price*(1 - p.down/100);
+    var pi;
+    if (p.rate === 0) pi = n > 0 ? loan/n : 0;
+    else pi = n > 0 ? loan*r*Math.pow(1+r,n)/(Math.pow(1+r,n)-1) : 0;
+    if (!isFinite(pi)) pi = 0;
+
+    var cashIn = p.price*p.down/100 + p.price*p.closing/100 + p.rehab;
+
+    var effRent1 = p.rent*(1-p.vac/100) + p.other;
+    var opex1 = p.tax/12 + p.ins/12 + p.hoa + p.util
+              + p.rent*p.maint/100 + p.rent*p.capex/100
+              + effRent1*p.mgmt/100;
+    var cf1 = effRent1 - opex1 - pi;
+    var cap = p.price > 0 ? (effRent1-opex1)*12/p.price : 0;
+    // null, not 0: a zero-cash-in deal has no cash-on-cash, and printing 0.00%
+    // would read as "terrible" when it is actually undefined.
+    var coc = cashIn > 0 ? cf1*12/cashIn : null;
+    var dscr = pi === 0 ? 999 : (effRent1-opex1)*12/(pi*12);
+
+    function balance(t){
+      if (p.rate === 0) return Math.max(0, loan - pi*12*t);
+      var d = Math.pow(1+r,n) - 1;
+      if (d === 0) return loan;
+      return loan*(Math.pow(1+r,n) - Math.pow(1+r,12*t))/d;
+    }
+
+    var hold = Math.max(1, Math.round(p.hold));
+    var years = [];
+    for (var t = 1; t <= hold; t++){
+      var rent_m = p.rent*Math.pow(1+p.rg/100, t-1);
+      var eff_m  = rent_m*(1-p.vac/100) + p.other;
+      var egi    = eff_m*12;
+      var fixed  = (p.tax + p.ins + (p.hoa+p.util)*12) * Math.pow(1+p.eg/100, t-1);
+      var variable = ( rent_m*(p.maint+p.capex)/100 + eff_m*p.mgmt/100 ) * 12;
+      var noi = egi - fixed - variable;
+      var cf  = noi - pi*12;
+      var val = p.price*Math.pow(1+p.app/100, t);
+      var bal = balance(t);
+      years.push({ t:t, rentYr:rent_m*12, egi:egi, noi:noi, cf:cf,
+                   val:val, bal:bal, eq:val-bal,
+                   coc: cashIn > 0 ? cf/cashIn : null });
+    }
+
+    function netSale(h){
+      var v = p.price*Math.pow(1+p.app/100, h);
+      return v*(1-p.sell/100) - balance(h);
+    }
+    function npv(rate, flows){
+      var s = 0;
+      for (var i = 0; i < flows.length; i++) s += flows[i]/Math.pow(1+rate, i);
+      return s;
+    }
+    // Bisection over [-0.99, 2.0]: robust for these shapes, and it cannot run away
+    // the way Newton can when the flow vector changes sign more than once.
+    function irr(flows){
+      var lo = -0.99, hi = 2.0;
+      var flo = npv(lo, flows), fhi = npv(hi, flows);
+      if (!isFinite(flo) || !isFinite(fhi) || flo*fhi > 0) return null;
+      for (var i = 0; i < 200; i++){
+        var mid = (lo+hi)/2, fm = npv(mid, flows);
+        if (Math.abs(fm) < 1e-7) return mid;
+        if (flo*fm < 0) hi = mid; else { lo = mid; flo = fm; }
+      }
+      return (lo+hi)/2;
+    }
+    function flowsTo(h){
+      var f = [-cashIn];
+      for (var t = 1; t <= h; t++) f.push(years[t-1].cf + (t === h ? netSale(h) : 0));
+      return f;
+    }
+
+    var irrHold = irr(flowsTo(hold));
+    var sumCf = 0;
+    for (var k = 0; k < years.length; k++) sumCf += years[k].cf;
+    var proceeds = netSale(hold);
+    var em = cashIn > 0 ? (sumCf + proceeds)/cashIn : null;
+    var profit = sumCf + proceeds - cashIn;
+
+    // Year-1 cash flow is linear in Rent, so breakeven is a closed form.
+    var a = (1-p.vac/100) - (p.maint+p.capex)/100 - (1-p.vac/100)*p.mgmt/100;
+    var b = p.other - p.other*p.mgmt/100 - (p.tax/12+p.ins/12+p.hoa+p.util) - pi;
+    var breakeven = a !== 0 ? -b/a : null;
+
+    var clears = null;
+    for (var h = 1; h <= hold; h++){
+      var ih = irr(flowsTo(h));
+      if (ih !== null && ih*100 >= p.tIRR){ clears = h; break; }
+    }
+
+    return { pi:pi, cashIn:cashIn, cf1:cf1, cap:cap, coc:coc, dscr:dscr,
+             years:years, irr:irrHold, em:em, profit:profit,
+             breakeven:breakeven, clears:clears, hold:hold, proceeds:proceeds };
+  }
+
+  /* ---------- heatmap ------------------------------------------------------ */
+  var RENT_STEPS  = [10, 5, 0, -5, -10];     // high rent at the top
+  var PRICE_STEPS = [-8, -4, 0, 4, 8];       // cheap at the left
+
+  // Bands are relative to the target, so green always means "beats your target".
+  function heatColor(irrPct, T){
+    if (irrPct === null) return "#eef0f4";
+    if (irrPct >= T + 6) return "#14b8a6";
+    if (irrPct >= T)     return "#5fc9b0";
+    if (irrPct >= T - 4) return "#fbcf5c";
+    if (irrPct >= T - 8) return "#fb9a4b";
+    return "#f2607a";
+  }
+
+  /* ---------- rendering ---------------------------------------------------- */
+  var el = function(id){ return document.getElementById(id); };
+
+  function buildInputs(){
+    var html = "";
+    for (var g = 0; g < GROUPS.length; g++){
+      var grp = GROUPS[g];
+      html += '<div class="grp"><h3>' + esc(grp.title) + '</h3><div class="fields">';
+      for (var i = 0; i < grp.keys.length; i++){
+        var k = grp.keys[i][0], label = grp.keys[i][1];
+        html += '<div class="f"><label for="f_' + k + '">' + esc(label) + '</label>' +
+                '<input id="f_' + k + '" data-k="' + k + '" type="number" step="any" inputmode="decimal"></div>';
+      }
+      html += '</div></div>';
+    }
+    el("groups").innerHTML = html;
+    var inputs = el("groups").querySelectorAll("input[data-k]");
+    for (var j = 0; j < inputs.length; j++){
+      inputs[j].addEventListener("input", onFieldInput);
+    }
+  }
+
+  function syncFields(){
+    var inputs = el("groups").querySelectorAll("input[data-k]");
+    for (var i = 0; i < inputs.length; i++){
+      var k = inputs[i].dataset.k;
+      if (document.activeElement !== inputs[i]) inputs[i].value = state[k];
+    }
+    el("dealName").value = dealName;
+  }
+
+  function onFieldInput(e){
+    var k = e.target.dataset.k;
+    var v = parseFloat(e.target.value);
+    // An empty or half-typed field must not blow up the model; treat it as 0
+    // for the maths but leave what the user is typing alone.
+    state[k] = isFinite(v) ? v : 0;
+    save();
+    render();
+  }
+
+  function render(){
+    var m = compute(state);
+    var T = state.tIRR;
+    var irrPct = m.irr === null ? null : m.irr*100;
+
+    // header
+    el("hdrPrice").textContent = money(state.price);
+    el("irrBig").textContent = irrPct === null ? "n/a" : pct(irrPct);
+    el("irrSub").textContent = "levered IRR over " + m.hold + " yr" + (m.hold === 1 ? "" : "s");
+
+    var chip = el("verdict"), cls, text;
+    if (irrPct !== null && irrPct >= T && m.cf1 > 0){
+      cls = "go"; text = "GO · beats your " + trimNum(T) + "% target";
+    } else if ((irrPct !== null && irrPct < 0) || (irrPct === null && m.profit < 0)){
+      // Unsolvable IRR plus a loss is still a loss; without this it read MARGINAL.
+      cls = "pass"; text = "PASS";
+    } else {
+      cls = "marginal"; text = "MARGINAL";
+    }
+    chip.className = "chip " + cls;
+    chip.textContent = text;
+
+    // tiles
+    var tiles = [
+      { l:"Cash-on-cash (yr 1)", v:m.coc === null ? "n/a" : pct(m.coc*100),
+        c:m.coc === null ? "" : (m.coc >= 0 ? "pos" : "neg"),
+        s:cocNote(m.coc, state.tCoC) },
+      { l:"Cash flow /mo (yr 1)", v:moneySigned(m.cf1), c:m.cf1 >= 0 ? "pos" : "neg",
+        s:moneySigned(m.cf1*12) + " /yr" },
+      { l:"Equity multiple", v:m.em === null ? "n/a" : m.em.toFixed(2) + "×", c:"",
+        s:"over " + m.hold + " yrs" },
+      { l:"Total profit", v:moneySigned(m.profit), c:m.profit >= 0 ? "pos" : "neg",
+        s:"cash flow + sale − cash in" }
+    ];
+    var th = "";
+    for (var i = 0; i < tiles.length; i++){
+      th += '<div class="tile"><div class="l">' + tiles[i].l + '</div>' +
+            '<div class="v ' + tiles[i].c + '">' + tiles[i].v + '</div>' +
+            '<div class="s">' + tiles[i].s + '</div></div>';
+    }
+    el("tiles").innerHTML = th;
+
+    // secondary figures
+    el("subfigs").innerHTML =
+      fig("P&I /mo", money(m.pi)) +
+      fig("Cash in", money(m.cashIn)) +
+      fig("Cap rate", pct(m.cap*100)) +
+      fig("DSCR", m.dscr >= 999 ? "999" : m.dscr.toFixed(2));
+
+    el("tgtLabel").textContent = trimNum(T) + "%";
+
+    // heatmap
+    renderHeat(m, T);
+
+    // pro forma
+    renderPf(m);
+
+    // callouts
+    var be = el("beCallout");
+    if (m.breakeven === null || !isFinite(m.breakeven)){
+      be.innerHTML = "Breakeven rent cannot be solved for these inputs.";
+    } else {
+      be.innerHTML = "Breakeven rent <b>" + money(m.breakeven) + "/mo</b>. " +
+        "Below this, cash flow goes negative.";
+    }
+    var cc = el("clearCallout");
+    if (m.clears !== null){
+      cc.className = "callout";
+      cc.innerHTML = "Clears your Target IRR (" + trimNum(T) + "%) from <b>year " + m.clears + "</b>.";
+    } else {
+      cc.className = "callout warn";
+      cc.innerHTML = "Does not clear your Target IRR (" + trimNum(T) + "%) within " +
+        m.hold + " yr" + (m.hold === 1 ? "" : "s") + ".";
+    }
+  }
+
+  // Makes Target CoC load-bearing: it states plainly whether year 1 clears it.
+  function cocNote(coc, target){
+    if (coc === null) return "target " + trimNum(target) + "%";
+    var v = coc*100;
+    return "target " + trimNum(target) + "% · " + (v >= target ? "met" : "short by " + pct(target - v));
+  }
+
+  function fig(l, v){
+    return '<div><span class="l">' + l + '</span><span class="v">' + v + '</span></div>';
+  }
+  // 12 not 12.00, but 12.5 stays 12.5.
+  function trimNum(v){ return String(Math.round(v*100)/100); }
+
+  function renderHeat(base, T){
+    var html = "<tbody>";
+    html += '<tr><td class="hmcorner">rent \\ price</td>';
+    for (var c = 0; c < PRICE_STEPS.length; c++){
+      var pv = state.price*(1 + PRICE_STEPS[c]/100);
+      html += "<th>" + money(pv) + "</th>";
+    }
+    html += "</tr>";
+
+    for (var rI = 0; rI < RENT_STEPS.length; rI++){
+      var rv = state.rent*(1 + RENT_STEPS[rI]/100);
+      html += '<tr><th class="rh">' + money(rv) + "</th>";
+      for (var cI = 0; cI < PRICE_STEPS.length; cI++){
+        var variant = Object.assign({}, state);
+        variant.rent = rv;
+        variant.price = state.price*(1 + PRICE_STEPS[cI]/100);
+        var mm = compute(variant);
+        var v = mm.irr === null ? null : mm.irr*100;
+        var label = v === null ? "n/a" : Math.round(v) + "%";
+        var title = "Rent " + money(rv) + "/mo, price " + money(variant.price) +
+                    " → IRR " + (v === null ? "n/a" : pct(v));
+        html += '<td style="background:' + heatColor(v, T) + '" title="' + esc(title) + '">' +
+                label + "</td>";
+      }
+      html += "</tr>";
+    }
+    html += "</tbody>";
+    var caption = el("heat").querySelector("caption");
+    el("heat").innerHTML = (caption ? caption.outerHTML : "") + html;
+  }
+
+  function renderPf(m){
+    var head = "<thead><tr><th>Yr</th><th>Rent /yr</th><th>NOI</th><th>Cash flow</th>" +
+               "<th>CoC %</th><th>Equity</th></tr></thead>";
+    var rows = "";
+    for (var i = 0; i < m.years.length; i++){
+      var y = m.years[i];
+      rows += "<tr><td>" + y.t + "</td>" +
+              "<td>" + money(y.rentYr) + "</td>" +
+              "<td>" + money(y.noi) + "</td>" +
+              '<td class="' + (y.cf >= 0 ? "pos" : "neg") + '">' + moneySigned(y.cf) + "</td>" +
+              '<td class="' + (y.coc === null ? "" : (y.coc >= 0 ? "pos" : "neg")) + '">' +
+                (y.coc === null ? "n/a" : pctSigned(y.coc*100)) + "</td>" +
+              "<td>" + money(y.eq) + "</td></tr>";
+    }
+    var caption = el("pf").querySelector("caption");
+    el("pf").innerHTML = (caption ? caption.outerHTML : "") + head + "<tbody>" + rows + "</tbody>";
+    el("pfCap").textContent = "Year by year over the " + m.hold + "-year hold. Sale proceeds of " +
+      money(m.proceeds) + " land in year " + m.hold + " on top of the cash flow shown.";
+  }
+
+  /* ---------- deal export string ------------------------------------------- */
+  function applyExport(raw){
+    var txt = String(raw == null ? "" : raw).trim();
+    if (!txt) return { ok:false, msg:"Nothing to read. Paste the Deal export cell." };
+    var parts = txt.split("|");
+    for (var i = 0; i < parts.length; i++) parts[i] = parts[i].trim();
+    var tag = parts.shift();
+    if (!tag || tag.toUpperCase() !== "RPDA1"){
+      return { ok:false, msg:"That does not look like a Deal export — it must start with RPDA1." };
+    }
+    if (parts.length !== EXPORT_ORDER.length){
+      return { ok:false, msg:"Expected " + EXPORT_ORDER.length + " numbers after RPDA1, found " + parts.length + "." };
+    }
+    var vals = {};
+    for (var j = 0; j < EXPORT_ORDER.length; j++){
+      var n = parseFloat(parts[j].replace(/[$,\s]/g, ""));
+      if (!isFinite(n)){
+        return { ok:false, msg:"Value " + (j+1) + " (" + EXPORT_ORDER[j] + ") is not a number." };
+      }
+      vals[EXPORT_ORDER[j]] = n;
+    }
+    // Only commit once every value parsed, so a bad cell never half-applies.
+    for (var k in vals) if (Object.prototype.hasOwnProperty.call(vals, k)) state[k] = vals[k];
+    return { ok:true, msg:"Deal loaded." };
+  }
+
+  /* ---------- storage ------------------------------------------------------ */
+  function save(){
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({ v:1, name:dealName, s:state }));
+    } catch (e) { /* storage blocked in a sandboxed iframe; not a dependency */ }
+  }
+  function load(){
+    try {
+      var raw = localStorage.getItem(STORE_KEY);
+      if (!raw) return;
+      var o = JSON.parse(raw);
+      if (!o || !o.s) return;
+      for (var k in SAMPLE){
+        if (Object.prototype.hasOwnProperty.call(SAMPLE, k)){
+          var v = parseFloat(o.s[k]);
+          if (isFinite(v)) state[k] = v;
+        }
+      }
+      if (typeof o.name === "string" && o.name) dealName = o.name.slice(0, 40);
+    } catch (e) { /* ignore unreadable or corrupt storage */ }
+  }
+
+  function setMsg(text, kind){
+    var m = el("pasteMsg");
+    m.textContent = text || "";
+    m.className = "pmsg" + (kind ? " " + kind : "");
+  }
+
+  /* ---------- wiring ------------------------------------------------------- */
+  buildInputs();
+  load();
+  syncFields();
+  render();
+
+  el("applyBtn").addEventListener("click", function(){
+    var res = applyExport(el("pasteBox").value);
+    setMsg(res.msg, res.ok ? "ok" : "err");
+    if (res.ok){ save(); syncFields(); render(); }
+  });
+
+  // Pasting the cell is the primary flow, so apply it straight away.
+  el("pasteBox").addEventListener("paste", function(){
+    setTimeout(function(){
+      var res = applyExport(el("pasteBox").value);
+      setMsg(res.msg, res.ok ? "ok" : "err");
+      if (res.ok){ save(); syncFields(); render(); }
+    }, 0);
+  });
+
+  el("resetBtn").addEventListener("click", function(){
+    state = Object.assign({}, SAMPLE);
+    dealName = SAMPLE_NAME;
+    el("pasteBox").value = "";
+    setMsg("Reset to the sample deal.", "ok");
+    save(); syncFields(); render();
+  });
+
+  el("dealName").addEventListener("input", function(e){
+    dealName = e.target.value.slice(0, 40);
+    save();
+  });
+
+  // Expose the sample string for the Reset hint and for tests.
+  window.__RPDA_SAMPLE__ = SAMPLE_STR;
+})();
+</script>
+</body>
+</html>

@@ -9,7 +9,7 @@ browser. Trade Analytics makes zero network requests at all; the spread board ca
 
 ## Contents
 
-All widgets belong to the Crypto / FX Trading Dashboard v2 template; folders are prefixed accordingly.
+Widgets are prefixed with the template they belong to.
 
 | Widget | Folder suffix | Data | URL config |
 | --- | --- | --- | --- |
@@ -18,6 +18,12 @@ All widgets belong to the Crypto / FX Trading Dashboard v2 template; folders are
 | Live Chart | `-live-chart` | TradingView | `?symbol=`, `?interval=` |
 | Live Ticker | `-ticker-tape` | Live, via `/api/ticker` | — |
 | Economic Calendar | `-economic-calendar` | TradingView | `?currencies=` |
+
+**Rental Property Deal Analyzer**
+
+| Widget | Folder | Data | URL config |
+| --- | --- | --- | --- |
+| Deal Analyzer | `Rental-Property-Deal-Analyzer-analyzer` | Fully client-side | — |
 
 The root `index.html` is a directory page linking to each widget.
 
@@ -34,6 +40,8 @@ notion-templates/
       index.html                         the trade-analytics widget (self-contained)
     Crypto-FX-Trading-Dashboard-v2-cross-exchange-spread/
       index.html                         the spread board (calls /api/spread)
+    Rental-Property-Deal-Analyzer-analyzer/
+      index.html                         rental deal analyzer (no backend, no network)
   README.md
   .gitignore
   vercel.json                            security headers, incl. frame-ancestors for Notion
@@ -130,6 +138,52 @@ So, for a widget that is already embedded anywhere:
 
 The same applies to `api/spread.js`: an embedded spread board calls `/api/spread` forever, so that route has
 to keep answering. Add `/api/spread-v2.js` for an incompatible response shape rather than changing this one.
+
+## Rental Property Deal Analyzer
+
+A single self-contained page: no backend, no network calls at runtime, nothing pulled from a CDN. Every
+number is computed in the browser and the last-used inputs are kept in `localStorage` under `rpda.v1`
+(wrapped in try/catch, so a sandboxed iframe with storage blocked still works).
+
+Two ways to get a deal in:
+
+- **Type the fields.** All 21 inputs are editable, grouped Purchase / Financing / Income / Operating costs
+  / Growth & exit, plus two widget-level targets (Target IRR, Target CoC) that are deliberately *not* part
+  of the export.
+- **Paste the Deal export cell** the Notion template produces: the tag `RPDA1` followed by 21 pipe-separated
+  numbers, read positionally.
+
+```
+RPDA1|Price|Down%|Rate%|Term|Closing%|Rehab|Rent|OtherIncome|Vacancy%|Tax/yr|Insurance/yr|HOA/mo|
+Utilities/mo|Maintenance%|CapEx%|Management%|RentGrowth%|ExpenseGrowth%|Appreciation%|SellCosts%|HoldYrs
+```
+
+**The export order is a wire format — never reorder it.** The Notion side writes positionally, so moving a
+column would silently misread every saved deal rather than failing loudly. A paste with the wrong tag, the
+wrong count, or a non-numeric value is rejected whole: it reports the problem inline and leaves the current
+values untouched, so a bad cell can never half-apply.
+
+### Regression numbers
+
+The preloaded Oakline sample doubles as the test. With
+`RPDA1|300000|25|6.5|30|3|6000|3300|0|5|3300|1200|0|0|5|5|8|3|3|3.5|6|10`, Target IRR 12 and Target CoC 8:
+
+| | |
+| --- | --- |
+| Monthly P&I | $1,422 |
+| Cash in | $90,000 |
+| Year-1 cash flow | +$757/mo |
+| Cap rate | 8.72% |
+| Cash-on-cash | 10.09% |
+| DSCR | 1.53 |
+| IRR (10-yr hold) | 18.45% |
+| Equity multiple | 3.74× |
+| Total profit | $246,169 |
+| Breakeven rent | $2,322/mo |
+| Clears the 12% target from | year 3 |
+
+If a code change moves any of these, the maths broke. All-cash deals (Down 100, Rate 0) must also stay
+safe: P&I 0, DSCR 999, IRR still solvable — verified at 10.87% for the sample.
 
 ## The TradingView-backed widgets
 
