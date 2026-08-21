@@ -150,18 +150,29 @@ Two ways to get a deal in:
 - **Type the fields.** All 21 inputs are editable, grouped Purchase / Financing / Income / Operating costs
   / Growth & exit, plus two widget-level targets (Target IRR, Target CoC) that are deliberately *not* part
   of the export.
-- **Paste the Deal export cell** the Notion template produces: the tag `RPDA1` followed by 21 pipe-separated
-  numbers, read positionally.
+- **Paste the Deal export cell** the Notion template produces: the tag `RPDA1`, then 21 pipe-separated
+  numbers read positionally, then the property name.
 
 ```
 RPDA1|Price|Down%|Rate%|Term|Closing%|Rehab|Rent|OtherIncome|Vacancy%|Tax/yr|Insurance/yr|HOA/mo|
-Utilities/mo|Maintenance%|CapEx%|Management%|RentGrowth%|ExpenseGrowth%|Appreciation%|SellCosts%|HoldYrs
+Utilities/mo|Maintenance%|CapEx%|Management%|RentGrowth%|ExpenseGrowth%|Appreciation%|SellCosts%|HoldYrs|Name
 ```
 
 **The export order is a wire format — never reorder it.** The Notion side writes positionally, so moving a
-column would silently misread every saved deal rather than failing loudly. A paste with the wrong tag, the
-wrong count, or a non-numeric value is rejected whole: it reports the problem inline and leaves the current
+column would silently misread every saved deal rather than failing loudly. A paste with the wrong tag, too
+few numbers, or a non-numeric value is rejected whole: it reports the problem inline and leaves the current
 values untouched, so a bad cell can never half-apply.
+
+The trailing **Name** is optional and drives the header title. Two consequences worth knowing:
+
+- The parser accepts **21 or more** fields after the tag, so cells written before the name existed still
+  load; they simply show "Your deal".
+- Everything past the 21st field is rejoined with `|` before being trimmed, so a name that itself contains
+  a pipe (`Unit A | Rear Lot`) survives the split intact. Nothing is trimmed before that rejoin, which is
+  why the spaces either side of an embedded pipe are preserved too.
+
+Typing in the numeric fields never changes the name — only a paste or a direct edit of the title does. The
+name is persisted alongside the numbers in the same `rpda.v1` blob.
 
 ### Regression numbers
 

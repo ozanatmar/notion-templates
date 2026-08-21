@@ -150,7 +150,7 @@
   <div class="band">
     <div class="eyebrow">
       <label class="sr-only" for="dealName">Deal name</label>
-      <input id="dealName" type="text" maxlength="40" value="Oakline duplex" spellcheck="false">
+      <input id="dealName" type="text" maxlength="80" value="142 Oakline Dr" placeholder="Your deal" spellcheck="false">
       <span class="dot">&middot;</span>
       <span class="price" id="hdrPrice">$300,000</span>
     </div>
@@ -171,12 +171,12 @@
       <div class="paste">
         <h3>Paste a Deal export cell</h3>
         <label class="sr-only" for="pasteBox">Deal export string</label>
-        <textarea id="pasteBox" spellcheck="false" placeholder="RPDA1|300000|25|6.5|30|3|6000|3300|0|5|3300|1200|0|0|5|5|8|3|3|3.5|6|10"></textarea>
+        <textarea id="pasteBox" spellcheck="false" placeholder="RPDA1|300000|25|6.5|30|3|6000|3300|0|5|3300|1200|0|0|5|5|8|3|3|3.5|6|10|142 Oakline Dr"></textarea>
         <div class="btns" style="margin-top:7px">
           <button class="btn" id="applyBtn" type="button">Apply</button>
         </div>
         <p class="pmsg" id="pasteMsg" role="status" aria-live="polite"></p>
-        <p class="hint">RPDA1 then 21 numbers, pipe separated.</p>
+        <p class="hint">RPDA1, then 21 numbers, then the property name. Pipe separated.</p>
       </div>
 
       <div class="btns">
@@ -247,8 +247,11 @@
     { title:"Targets",         keys:[["tIRR","Target IRR %"],["tCoC","Target CoC %"]] }
   ];
 
-  var SAMPLE_STR = "RPDA1|300000|25|6.5|30|3|6000|3300|0|5|3300|1200|0|0|5|5|8|3|3|3.5|6|10";
-  var SAMPLE_NAME = "Oakline duplex";
+  var SAMPLE_STR = "RPDA1|300000|25|6.5|30|3|6000|3300|0|5|3300|1200|0|0|5|5|8|3|3|3.5|6|10|142 Oakline Dr";
+  var SAMPLE_NAME = "142 Oakline Dr";
+  // Shown when an export carries no name, or the field is cleared.
+  var DEFAULT_NAME = "Your deal";
+  var MAX_NAME = 80;
   var SAMPLE = {
     price:300000, down:25, rate:6.5, term:30, closing:3, rehab:6000,
     rent:3300, other:0, vac:5, tax:3300, ins:1200, hoa:0, util:0,
@@ -597,26 +600,33 @@
   function applyExport(raw){
     var txt = String(raw == null ? "" : raw).trim();
     if (!txt) return { ok:false, msg:"Nothing to read. Paste the Deal export cell." };
+    // Deliberately not trimmed up front: the name is rejoined from its parts below,
+    // and trimming each piece first would eat the spaces around a pipe in a name.
     var parts = txt.split("|");
-    for (var i = 0; i < parts.length; i++) parts[i] = parts[i].trim();
-    var tag = parts.shift();
+    var tag = String(parts[0] == null ? "" : parts[0]).trim();
     if (!tag || tag.toUpperCase() !== "RPDA1"){
       return { ok:false, msg:"That does not look like a Deal export — it must start with RPDA1." };
     }
-    if (parts.length !== EXPORT_ORDER.length){
-      return { ok:false, msg:"Expected " + EXPORT_ORDER.length + " numbers after RPDA1, found " + parts.length + "." };
+    var fields = parts.slice(1);
+    // 21 numbers are required; anything after them is the optional property name, so
+    // the old 21-field cells keep working alongside the new 22-field ones.
+    if (fields.length < EXPORT_ORDER.length){
+      return { ok:false, msg:"Expected at least " + EXPORT_ORDER.length + " numbers after RPDA1, found " + fields.length + "." };
     }
     var vals = {};
     for (var j = 0; j < EXPORT_ORDER.length; j++){
-      var n = parseFloat(parts[j].replace(/[$,\s]/g, ""));
+      var n = parseFloat(String(fields[j]).trim().replace(/[$,\s]/g, ""));
       if (!isFinite(n)){
         return { ok:false, msg:"Value " + (j+1) + " (" + EXPORT_ORDER[j] + ") is not a number." };
       }
       vals[EXPORT_ORDER[j]] = n;
     }
+    // Rejoin with the delimiter so a name that itself contains "|" survives the split.
+    var name = fields.slice(EXPORT_ORDER.length).join("|").trim().slice(0, MAX_NAME);
     // Only commit once every value parsed, so a bad cell never half-applies.
     for (var k in vals) if (Object.prototype.hasOwnProperty.call(vals, k)) state[k] = vals[k];
-    return { ok:true, msg:"Deal loaded." };
+    dealName = name || DEFAULT_NAME;
+    return { ok:true, msg: name ? ("Loaded " + name + ".") : "Deal loaded." };
   }
 
   /* ---------- storage ------------------------------------------------------ */
@@ -639,7 +649,7 @@
       }
       // A previous session could have stored a hold big enough to hang the render.
       state.hold = Math.min(MAX_HOLD, Math.max(1, Math.round(state.hold) || 1));
-      if (typeof o.name === "string" && o.name) dealName = o.name.slice(0, 40);
+      if (typeof o.name === "string" && o.name) dealName = o.name.slice(0, MAX_NAME);
     } catch (e) { /* ignore unreadable or corrupt storage */ }
   }
 
@@ -679,7 +689,7 @@
   });
 
   el("dealName").addEventListener("input", function(e){
-    dealName = e.target.value.slice(0, 40);
+    dealName = e.target.value.slice(0, MAX_NAME);
     save();
   });
 
