@@ -261,7 +261,9 @@
 
   /* ---------- formatting -------------------------------------------------- */
   var num0 = function(v){ return Math.round(v).toLocaleString("en-US"); };
-  function money(v){ return "$" + num0(Math.abs(v)); }
+  // Sign-preserving: equity, NOI and sale proceeds all go negative on an underwater
+  // deal, and printing those as positive dollars inverts the meaning.
+  function money(v){ return (v < 0 ? "-$" : "$") + num0(Math.abs(v)); }
   function moneySigned(v){ return (v < 0 ? "-" : "+") + "$" + num0(Math.abs(v)); }
   function pct(v, dp){ return v.toFixed(dp === undefined ? 2 : dp) + "%"; }
   function pctSigned(v){ return (v >= 0 ? "+" : "") + v.toFixed(2) + "%"; }
@@ -274,7 +276,11 @@
   /* ---------- the model ---------------------------------------------------
      Ported verbatim from the spec. Every branch is guarded so an all-cash deal
      (Down 100, Rate 0) yields P&I 0 and DSCR 999 rather than dividing by zero. */
-  function compute(p){
+  var MAX_HOLD = 60;
+  // clearsTarget is only read for the headline deal. The 25 heatmap variants call
+  // compute() too, and that loop is O(hold^2) per call, so running it 26 times per
+  // keystroke is what made a large hold hang the page.
+  function compute(p, opts){
     var r = p.rate/1200, n = p.term*12;
     var loan = p.price*(1 - p.down/100);
     var pi;
@@ -302,7 +308,7 @@
       return loan*(Math.pow(1+r,n) - Math.pow(1+r,12*t))/d;
     }
 
-    var hold = Math.max(1, Math.round(p.hold));
+    var hold = Math.min(MAX_HOLD, Math.max(1, Math.round(p.hold) || 1));
     var years = [];
     for (var t = 1; t <= hold; t++){
       var rent_m = p.rent*Math.pow(1+p.rg/100, t-1);
@@ -332,6 +338,11 @@
     // the way Newton can when the flow vector changes sign more than once.
     function irr(flows){
       var lo = -0.99, hi = 2.0;
+      // An all-zero vector makes npv 0 at both ends, which passes the sign test and
+      // returns the bracket midpoint (0.505) as a confident 50.50%. It has no IRR.
+      var allZero = true;
+      for (var z = 0; z < flows.length; z++){ if (flows[z] !== 0){ allZero = false; break; } }
+      if (allZero) return null;
       var flo = npv(lo, flows), fhi = npv(hi, flows);
       if (!isFinite(flo) || !isFinite(fhi) || flo*fhi > 0) return null;
       for (var i = 0; i < 200; i++){
@@ -360,9 +371,11 @@
     var breakeven = a !== 0 ? -b/a : null;
 
     var clears = null;
-    for (var h = 1; h <= hold; h++){
-      var ih = irr(flowsTo(h));
-      if (ih !== null && ih*100 >= p.tIRR){ clears = h; break; }
+    if (!(opts && opts.fast)){
+      for (var h = 1; h <= hold; h++){
+        var ih = irr(flowsTo(h));
+        if (ih !== null && ih*100 >= p.tIRR){ clears = h; break; }
+      }
     }
 
     return { pi:pi, cashIn:cashIn, cf1:cf1, cap:cap, coc:coc, dscr:dscr,
@@ -403,6 +416,7 @@
     var inputs = el("groups").querySelectorAll("input[data-k]");
     for (var j = 0; j < inputs.length; j++){
       inputs[j].addEventListener("input", onFieldInput);
+      inputs[j].addEventListener("change", onFieldCommit);
     }
   }
 
@@ -423,6 +437,20 @@
     state[k] = isFinite(v) ? v : 0;
     save();
     render();
+  }
+
+  // On commit (blur/Enter), snap Hold to what the model actually used, so the field
+  // can never disagree with the table. Deliberately not on "input": clearing the
+  // field to retype it would otherwise fight the user mid-keystroke.
+  function onFieldCommit(e){
+    if (e.target.dataset.k !== "hold") return;
+    var clamped = Math.min(MAX_HOLD, Math.max(1, Math.round(state.hold) || 1));
+    if (clamped !== state.hold){
+      state.hold = clamped;
+      e.target.value = clamped;
+      save();
+      render();
+    }
   }
 
   function render(){
@@ -530,7 +558,7 @@
         var variant = Object.assign({}, state);
         variant.rent = rv;
         variant.price = state.price*(1 + PRICE_STEPS[cI]/100);
-        var mm = compute(variant);
+        var mm = compute(variant, { fast:true });
         var v = mm.irr === null ? null : mm.irr*100;
         var label = v === null ? "n/a" : Math.round(v) + "%";
         var title = "Rent " + money(rv) + "/mo, price " + money(variant.price) +
@@ -609,6 +637,8 @@
           if (isFinite(v)) state[k] = v;
         }
       }
+      // A previous session could have stored a hold big enough to hang the render.
+      state.hold = Math.min(MAX_HOLD, Math.max(1, Math.round(state.hold) || 1));
       if (typeof o.name === "string" && o.name) dealName = o.name.slice(0, 40);
     } catch (e) { /* ignore unreadable or corrupt storage */ }
   }
